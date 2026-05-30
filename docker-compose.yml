@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  voice-agent:
+    build: .
+    container_name: voice-agent-app
+    restart: always
+    ports:
+      - "1122:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
