@@ -21,8 +21,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
           script: |
-            # 1. Navigate to your project directory on the server
-            cd /home/vilgax/voiceaget
+            # 1. Navigate to your correct project directory on the server
+            cd /home/vilgax/voiceaget/Voice-Agent
             
             # 2. Pull the newest changes from the main branch
             git pull origin main
