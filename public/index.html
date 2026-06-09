@@ -912,6 +912,9 @@
     }
 
     if (isFinal) {
+      if (text) {
+        currentAiBubble.textContent += text;
+      }
       currentAiBubble = null; // finalize bubble
     } else {
       currentAiBubble.textContent += text;

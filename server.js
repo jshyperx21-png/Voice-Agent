@@ -215,7 +215,7 @@ wssStream.on('connection', (ws, req) => {
           callState.status = 'active';
           broadcastToBrowsers({ event: 'status-update', state: callState });
 
-          // Establish deepgram and cartesia streams
+          // Establish the Sarvam STT stream and start the agent.
           agent.start();
           break;
 
@@ -224,7 +224,7 @@ wssStream.on('connection', (ws, req) => {
           if (!agent.streamId && message.streamId) {
             agent.setStreamId(message.streamId);
           }
-          // Feed the inbound G.711 mu-law audio chunk directly to Deepgram
+          // Feed the inbound G.711 mu-law audio chunk to Sarvam STT.
           if (message.media?.payload) {
             agent.handleInboundAudio(message.media.payload);
           }
