@@ -322,8 +322,12 @@ export class VoiceAgent {
       const chunkId = wavBuffer.toString('ascii', offset, offset + 4);
       const chunkSize = wavBuffer.readUInt32LE(offset + 4);
       const chunkDataStart = offset + 8;
+      const chunkDataEnd = Math.min(chunkDataStart + chunkSize, wavBuffer.length);
 
       if (chunkId === 'fmt ') {
+        if (chunkDataEnd - chunkDataStart < 16) {
+          throw new Error('Invalid WAV fmt chunk from Cartesia.');
+        }
         format = {
           audioFormat: wavBuffer.readUInt16LE(chunkDataStart),
           channels: wavBuffer.readUInt16LE(chunkDataStart + 2),
@@ -332,7 +336,7 @@ export class VoiceAgent {
         };
       } else if (chunkId === 'data') {
         dataStart = chunkDataStart;
-        dataSize = chunkSize;
+        dataSize = chunkDataEnd - chunkDataStart;
         break;
       }
 
@@ -347,7 +351,9 @@ export class VoiceAgent {
       throw new Error(`Unsupported WAV format: format=${format.audioFormat}, bits=${format.bitsPerSample}`);
     }
 
-    const sampleCount = Math.floor(dataSize / 2 / format.channels);
+    const bytesPerFrame = format.channels * 2;
+    const safeDataSize = Math.floor(dataSize / bytesPerFrame) * bytesPerFrame;
+    const sampleCount = Math.floor(safeDataSize / bytesPerFrame);
     const samples = new Int16Array(sampleCount);
 
     for (let i = 0; i < sampleCount; i++) {
