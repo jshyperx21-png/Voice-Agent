@@ -1,12 +1,6 @@
-import WebSocket from 'ws';
+﻿import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-
-// Helper to generate a random UUID
-function generateUUID() {
-  return crypto.randomUUID();
-}
 
 export class VoiceAgent {
   constructor(plivoWs, statusCallbacks) {
@@ -22,81 +16,51 @@ export class VoiceAgent {
     this.streamId = null;
     this.history = [];
     this.isSpeaking = false;
-    this.cartesiaDone = false;
     
     // Outbound audio buffer (mu-law G.711, 8kHz raw bytes)
     this.outboundAudioBuffer = Buffer.alloc(0);
     this.playbackInterval = null;
     this.playbackDoneTimeout = null;
     this.outboundBytesSent = 0;
-    this.prebufferMs = Number(process.env.TTS_PREBUFFER_MS || 700);
-    this.prebufferBytes = Math.round(8000 * (this.prebufferMs / 1000)); // 8 kHz mu-law
-    this.ttsChunkMs = Number(process.env.TTS_CHUNK_MS || 100);
 
     // Active connection references
-    this.deepgramWs = null;
-    this.cartesiaWs = null;
     this.sarvamSttWs = null;
     this.currentLlmController = null;
     
-    // Track current speech turn IDs
-    this.cartesiaContextId = null;
     this.userUtteranceBuffer = '';
+    this.silenceTimeout = null;
+    this.silenceTimeoutMs = Number(process.env.SILENCE_TIMEOUT_MS || 15000);
+    this.endCallAfterSpeech = false;
 
     // Reconnection & lifecycle state
     this.isClosed = false;
-    this.deepgramReconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
     this.greetingSpoken = false;
     this.sarvamSttFatalError = false;
 
     // Load voice config
-    this.voiceId = process.env.CARTESIA_VOICE_ID || 'f786b574-daa5-4673-aa0c-cbe3e8534c02';
+    this.openaiModelId = process.env.OPENAI_MODEL || 'gpt-4.1';
+    this.openaiApiUrl = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
+    this.isAzureOpenAI = process.env.OPENAI_PROVIDER === 'azure' || this.openaiApiUrl.includes('.openai.azure.com');
+    this.enableBargeIn = process.env.ENABLE_BARGE_IN === 'true';
+    // Previous ElevenLabs TTS config kept for rollback/reference.
+    // this.elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
+    // this.elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
+    // this.elevenLabsModelId = process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5';
+    // this.elevenLabsOutputFormat = process.env.ELEVENLABS_OUTPUT_FORMAT || 'ulaw_8000';
+    // this.elevenLabsStreaming = process.env.ELEVENLABS_TTS_STREAMING !== 'false';
+    // this.elevenLabsStability = Number(process.env.ELEVENLABS_STABILITY || 0.5);
+    // this.elevenLabsSimilarityBoost = Number(process.env.ELEVENLABS_SIMILARITY_BOOST || 0.75);
+    this.cartesiaApiKey = process.env.CARTESIA_API_KEY;
     this.cartesiaModelId = process.env.CARTESIA_MODEL_ID || 'sonic-3.5';
+    this.cartesiaVoiceId = process.env.CARTESIA_VOICE_ID || '25d2c432-139c-4035-bfd6-9baaabcdd006';
     this.cartesiaLanguage = process.env.CARTESIA_LANGUAGE || 'ta';
     this.cartesiaVersion = process.env.CARTESIA_VERSION || '2026-03-01';
-    this.openaiModelId = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
-    this.deepgramLanguage = process.env.DEEPGRAM_LANGUAGE || 'ta';
-    this.deepgramEndpointing = process.env.DEEPGRAM_ENDPOINTING || '350';
-    this.enableBargeIn = process.env.ENABLE_BARGE_IN === 'true';
+    this.cartesiaSpeed = Number(process.env.CARTESIA_SPEED || 1);
+    this.cartesiaVolume = Number(process.env.CARTESIA_VOLUME || 1);
+    this.cartesiaEmotion = process.env.CARTESIA_EMOTION || 'calm';
     this.sarvamApiKey = process.env.SARVAM_API_KEY;
     this.sarvamSttLanguage = process.env.SARVAM_STT_LANGUAGE || 'ta-IN';
     this.sarvamSttMode = process.env.SARVAM_STT_MODE || 'codemix';
-    this.sarvamTtsLanguage = process.env.SARVAM_TTS_LANGUAGE || 'ta-IN';
-    this.sarvamTtsModel = process.env.SARVAM_TTS_MODEL || 'bulbul:v3';
-    this.sarvamTtsSpeaker = process.env.SARVAM_TTS_SPEAKER || 'ritu';
-    this.sarvamTtsPace = Number(process.env.SARVAM_TTS_PACE || 1);
-    this.sarvamTtsTemperature = Number(process.env.SARVAM_TTS_TEMPERATURE || 0.35);
-    this.deepgramKeyterms = [
-      'Shanmuga Hospital',
-      'Facebook',
-      'full body checkup',
-      'package',
-      'packages',
-      'Silver',
-      'Gold',
-      'Platinum',
-      'சில்வர்',
-      'கோல்டு',
-      'பிளாட்டினம்',
-      'பிளாட்டினம் package',
-      'கோல்டு package',
-      'சில்வர் package',
-      'appointment',
-      'doctor',
-      'insurance',
-      'CT scan',
-      'MRI',
-      'ECG',
-      'echo',
-      'cardiology',
-      'cancer screening',
-      'blood test',
-      'fasting',
-      'vitamin D',
-      'thyroid',
-      'calcium'
-    ];
   }
 
   /**
@@ -113,14 +77,12 @@ export class VoiceAgent {
   speakGreeting() {
     if (this.isClosed) return;
 
-    const greetingText = "வணக்கம், நான் Shanmuga Hospitalல இருந்து Karthika பேசுறேன்.";
+    const greetingText = this.getGreetingText();
     console.log(`[Agent] Speaking greeting: "${greetingText}"`);
 
     this.isSpeaking = true;
-    this.cartesiaDone = false;
     this.outboundAudioBuffer = Buffer.alloc(0);
     this.outboundBytesSent = 0;
-    this.cartesiaContextId = generateUUID();
 
     // Add greeting to LLM conversation history so the model knows it was spoken
     this.history.push({ role: 'assistant', content: greetingText });
@@ -129,7 +91,35 @@ export class VoiceAgent {
     this.statusCallbacks.onAiTranscript(greetingText, true);
     this.statusCallbacks.onStateChange('active');
 
-    this.synthesizeWithSarvam(greetingText);
+    this.synthesizeSpeech(greetingText);
+  }
+
+  loadAgentFiles() {
+    let systemPrompt = 'You are a warm and helpful voice assistant. Keep replies short and ask one question at a time.';
+    let knowledgeBase = '';
+
+    try {
+      systemPrompt = fs.readFileSync(path.resolve('./system_prompt.txt'), 'utf8');
+      knowledgeBase = fs.readFileSync(path.resolve('./knowledge_base.txt'), 'utf8');
+    } catch (e) {
+      console.warn('[Agent] Could not load system prompt or knowledge base files, using default settings.');
+    }
+
+    return { systemPrompt, knowledgeBase };
+  }
+
+  getGreetingText() {
+    const { systemPrompt } = this.loadAgentFiles();
+    const greetingLine = systemPrompt
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => /^GREETING\s*:/i.test(line));
+
+    if (greetingLine) {
+      return greetingLine.replace(/^GREETING\s*:/i, '').trim();
+    }
+
+    return 'à®µà®£à®•à¯à®•à®®à¯, à®¨à®¾à®©à¯ AI assistant à®ªà¯‡à®šà¯à®±à¯‡à®©à¯. à®Žà®ªà¯à®ªà®Ÿà®¿ help à®ªà®£à¯à®£à®²à®¾à®®à¯?';
   }
 
   /**
@@ -149,6 +139,7 @@ export class VoiceAgent {
       'language-code': this.sarvamSttLanguage,
       mode: this.sarvamSttMode,
       sample_rate: '8000',
+      endpointing: '250',
       vad_signals: 'true',
       high_vad_sensitivity: 'true',
       input_audio_codec: 'pcm_s16le'
@@ -242,292 +233,69 @@ export class VoiceAgent {
     return pcmBuffer;
   }
 
-  /**
-   * Connect to Deepgram Streaming STT
-   */
-  connectDeepgram() {
-    if (this.isClosed) return;
-
-    const apiKey = process.env.DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      console.error('[Deepgram] Missing API key in environment variables.');
-      this.statusCallbacks.onError('Deepgram API Key is missing.');
-      return;
-    }
-
-    const params = new URLSearchParams({
-      model: 'nova-3',
-      language: this.deepgramLanguage,
-      encoding: 'mulaw',
-      sample_rate: '8000',
-      channels: '1',
-      smart_format: 'true',
-      interim_results: 'false',
-      endpointing: this.deepgramEndpointing,
-      vad_events: 'true'
-    });
-
-    for (const keyterm of this.deepgramKeyterms) {
-      params.append('keyterm', keyterm);
-    }
-
-    const url = `wss://api.deepgram.com/v1/listen?${params.toString()}`;
-
-    console.log(`[Deepgram] Connecting to streaming server. Language: ${this.deepgramLanguage}, Endpointing: ${this.deepgramEndpointing}ms`);
-    this.deepgramWs = new WebSocket(url, {
-      headers: {
-        Authorization: `Token ${apiKey}`
-      }
-    });
-
-    this.deepgramWs.on('open', () => {
-      console.log('[Deepgram] WebSocket established successfully.');
-      this.deepgramReconnectAttempts = 0;
-    });
-
-    this.deepgramWs.on('message', (data) => {
-      try {
-        const response = JSON.parse(data);
-        const transcript = response.channel?.alternatives?.[0]?.transcript || '';
-        const isFinal = response.is_final;
-        const speechFinal = response.speech_final;
-
-        if (transcript.trim().length > 0) {
-          // Treat only final caller speech as a barge-in. Interim STT can contain
-          // short echo/noise while outbound audio is still being played.
-          if (this.enableBargeIn && this.isSpeaking && isFinal && this.isActionableUtterance(transcript)) {
-            this.handleInterruption();
-          }
-
-          // Broadcast transcript updates to status listeners (e.g. browser dashboard)
-          this.statusCallbacks.onUserTranscript(transcript, isFinal);
-
-          if (isFinal) {
-            console.log(`[Deepgram] Final Transcript: "${transcript}"`);
-            this.userUtteranceBuffer += (this.userUtteranceBuffer ? ' ' : '') + transcript;
-          }
-        }
-
-        // When the caller stops speaking (silence detected), trigger the AI turn
-        if (speechFinal && this.userUtteranceBuffer.trim().length > 0) {
-          const completeUtterance = this.normalizeTranscript(this.userUtteranceBuffer.trim());
-          this.userUtteranceBuffer = '';
-          if (!this.isActionableUtterance(completeUtterance)) {
-            console.log(`[Deepgram] Ignoring short/noisy transcript: "${completeUtterance}"`);
-            return;
-          }
-          this.handleUserUtterance(completeUtterance);
-        }
-      } catch (err) {
-        console.error('[Deepgram] Error parsing incoming message:', err);
-      }
-    });
-
-    this.deepgramWs.on('close', (code, reason) => {
-      console.log(`[Deepgram] Connection closed. Code: ${code}, Reason: ${reason}`);
-      if (!this.isClosed) {
-        this.reconnectDeepgram();
-      }
-    });
-
-    this.deepgramWs.on('error', (error) => {
-      console.error('[Deepgram] WebSocket Error:', error);
-    });
-  }
-
-  /**
-   * Reconnect to Deepgram with exponential backoff
-   */
-  reconnectDeepgram() {
-    if (this.deepgramReconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[Deepgram] Max reconnection attempts reached. Failing call.');
-      this.statusCallbacks.onError('Failed to reconnect to Deepgram.');
-      return;
-    }
-
-    this.deepgramReconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.deepgramReconnectAttempts), 10000);
-    console.log(`[Deepgram] Reconnecting in ${delay}ms (Attempt ${this.deepgramReconnectAttempts}/${this.maxReconnectAttempts})...`);
-    
-    setTimeout(() => {
-      this.connectDeepgram();
-    }, delay);
-  }
-
-  /**
-   * Connect to Cartesia WebSocket TTS API
-   */
-  connectCartesia() {
-    if (this.isClosed) return;
-
-    const apiKey = process.env.CARTESIA_API_KEY;
-    if (!apiKey) {
-      console.error('[Cartesia] Missing API key in environment variables.');
-      this.statusCallbacks.onError('Cartesia API Key is missing.');
-      return;
-    }
-
-    // Connect to the streaming API with the version that supports Sonic 3.5.
-    const url = `wss://api.cartesia.ai/tts/websocket?cartesia_version=${this.cartesiaVersion}`;
-
-    console.log(`[Cartesia] Connecting to streaming server. Model: ${this.cartesiaModelId}, Language: ${this.cartesiaLanguage}, Version: ${this.cartesiaVersion}`);
-    this.cartesiaWs = new WebSocket(url, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
-
-    this.cartesiaWs.on('open', () => {
-      console.log('[Cartesia] WebSocket established successfully.');
-      if (!this.greetingSpoken) {
-        this.greetingSpoken = true;
-        setTimeout(() => this.speakGreeting(), 500);
-      }
-    });
-
-    this.cartesiaWs.on('message', (data) => {
-      try {
-        const response = JSON.parse(data);
-
-        if (response.type === 'error' || response.status_code >= 400) {
-          console.error('[Cartesia] API error:', response);
-          this.statusCallbacks.onError(response.error || response.message || 'Cartesia TTS error.');
-          this.cartesiaDone = true;
-          return;
-        }
-
-        // Ignore packets belonging to orphaned contexts (from interruptions)
-        if (response.context_id !== this.cartesiaContextId) {
-          return;
-        }
-
-        if ((response.type === 'chunk' || response.type === 'audio') && response.data) {
-          // Push Cartesia's raw mulaw G.711 chunks to our outbound queue
-          const audioChunk = Buffer.from(response.data, 'base64');
-          this.outboundAudioBuffer = Buffer.concat([this.outboundAudioBuffer, audioChunk]);
-
-          // Start after a short jitter buffer so Plivo receives smooth audio.
-          if (!this.playbackInterval && this.isSpeaking && this.outboundAudioBuffer.length >= this.prebufferBytes) {
-            this.startOutboundPlaybackLoop();
-          }
-        } else if (response.type === 'done' || response.done === true) {
-          console.log('[Cartesia] Finished streaming audio for context:', response.context_id);
-          this.cartesiaDone = true;
-        }
-      } catch (err) {
-        console.error('[Cartesia] Error handling message:', err);
-      }
-    });
-
-    this.cartesiaWs.on('close', (code, reason) => {
-      console.log(`[Cartesia] Connection closed. Code: ${code}, Reason: ${reason}`);
-      if (!this.isClosed) {
-        console.log('[Cartesia] Attempting immediate reconnect...');
-        setTimeout(() => this.connectCartesia(), 1000);
-      }
-    });
-
-    this.cartesiaWs.on('error', (error) => {
-      console.error('[Cartesia] WebSocket Error:', error);
-    });
-  }
-
-  /**
-   * Send text to Cartesia using the current WebSocket generation schema.
-   */
-  sendTextToCartesia(transcript, shouldContinue) {
-    if (!this.cartesiaWs || this.cartesiaWs.readyState !== WebSocket.OPEN) {
-      return false;
-    }
-
-    if (!transcript || transcript.trim().length === 0) {
-      return false;
-    }
-
-    this.cartesiaWs.send(JSON.stringify({
-      context_id: this.cartesiaContextId,
-      model_id: this.cartesiaModelId,
-      transcript,
-      language: this.cartesiaLanguage,
-      voice: {
-        mode: 'id',
-        id: this.voiceId
-      },
-      output_format: {
-        container: 'raw',
-        encoding: 'pcm_mulaw',
-        sample_rate: 8000
-      },
-      continue: shouldContinue
-    }));
-
-    return true;
-  }
-
-  flushTextToCartesia(text, shouldContinue) {
-    const cleanText = text.replace(/\s+/g, ' ').trim();
-    if (!cleanText) return false;
-    return this.sendTextToCartesia(cleanText, shouldContinue);
-  }
-
-  /**
-   * Sarvam REST TTS returns one complete 8kHz mu-law audio payload.
-   * That matches Plivo directly and avoids transcoding-related choppiness.
-   */
-  async synthesizeWithSarvam(text) {
+  async synthesizeSpeech(text) {
     const cleanText = text.replace(/\s+/g, ' ').trim();
     if (!cleanText || this.isClosed || !this.isSpeaking) return false;
+    const synthesized = await this.synthesizeWithCartesia(cleanText);
+    if (!synthesized && this.isSpeaking && !this.isClosed) {
+      this.markAgentIdle('[Cartesia TTS] Failed to synthesize audio. Agent idle.');
+    }
+    return synthesized;
+  }
 
-    if (!this.sarvamApiKey) {
-      console.error('[Sarvam TTS] Missing API key in environment variables.');
-      this.statusCallbacks.onError('Sarvam API Key is missing.');
-      this.isSpeaking = false;
+  async synthesizeWithCartesia(cleanText) {
+    if (!this.cartesiaApiKey) {
+      console.error('[Cartesia TTS] Missing API key in environment variables.');
+      this.statusCallbacks.onError('Cartesia API Key is missing.');
       return false;
     }
 
     try {
-      console.log(`[Sarvam TTS] Synthesizing with ${this.sarvamTtsModel}, speaker: ${this.sarvamTtsSpeaker}`);
-      const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+      console.log(`[Cartesia TTS] Synthesizing with ${this.cartesiaModelId}, voice: ${this.cartesiaVoiceId}, language: ${this.cartesiaLanguage}`);
+
+      const response = await fetch('https://api.cartesia.ai/tts/bytes', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'api-subscription-key': this.sarvamApiKey
+          'Cartesia-Version': this.cartesiaVersion,
+          'X-API-Key': this.cartesiaApiKey,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          text: cleanText,
-          target_language_code: this.sarvamTtsLanguage,
-          speaker: this.sarvamTtsSpeaker,
-          model: this.sarvamTtsModel,
-          pace: this.sarvamTtsPace,
-          speech_sample_rate: 8000,
-          output_audio_codec: 'mulaw',
-          enable_preprocessing: true,
-          temperature: this.sarvamTtsTemperature
+          model_id: this.cartesiaModelId,
+          transcript: cleanText,
+          voice: {
+            mode: 'id',
+            id: this.cartesiaVoiceId
+          },
+          output_format: {
+            container: 'wav',
+            encoding: 'pcm_s16le',
+            sample_rate: 44100
+          },
+          language: this.cartesiaLanguage,
+          generation_config: {
+            speed: this.cartesiaSpeed,
+            volume: this.cartesiaVolume,
+            emotion: this.cartesiaEmotion
+          }
         })
       });
 
       if (!response.ok) {
         const errorBody = await response.text().catch(() => '');
-        throw new Error(`Sarvam TTS HTTP error: ${response.status} ${errorBody}`);
+        throw new Error(`Cartesia HTTP error: ${response.status} ${errorBody}`);
       }
 
-      const data = await response.json();
-      const audioBase64 =
-        data.audios?.[0] ||
-        data.audio ||
-        data.audio_base64 ||
-        data.data?.audio ||
-        data.data?.audios?.[0];
+      const wavBuffer = Buffer.from(await response.arrayBuffer());
+      const pcm = this.extractPcm16FromWav(wavBuffer);
+      const pcm8k = this.resamplePcm16(pcm.samples, pcm.sampleRate, 8000);
+      const mulawAudio = this.pcm16SamplesToMulawBuffer(pcm8k);
 
-      if (!audioBase64) {
-        throw new Error(`Sarvam TTS response did not include audio: ${JSON.stringify(data)}`);
+      if (mulawAudio.length === 0) {
+        throw new Error('Cartesia returned no playable audio.');
       }
 
-      this.outboundAudioBuffer = Buffer.concat([
-        this.outboundAudioBuffer,
-        Buffer.from(audioBase64, 'base64')
-      ]);
-      this.cartesiaDone = true;
+      this.outboundAudioBuffer = Buffer.concat([this.outboundAudioBuffer, mulawAudio]);
 
       if (!this.playbackInterval && this.isSpeaking) {
         this.startOutboundPlaybackLoop();
@@ -535,22 +303,296 @@ export class VoiceAgent {
 
       return true;
     } catch (err) {
-      console.error('[Sarvam TTS] Error:', err);
-      this.statusCallbacks.onError('Sarvam TTS error.');
-      this.cartesiaDone = true;
-      this.isSpeaking = false;
-      this.stopOutboundPlaybackLoop();
+      console.error('[Cartesia TTS] Error:', err);
       return false;
     }
   }
 
+  extractPcm16FromWav(wavBuffer) {
+    if (wavBuffer.toString('ascii', 0, 4) !== 'RIFF' || wavBuffer.toString('ascii', 8, 12) !== 'WAVE') {
+      throw new Error('Invalid WAV response from Cartesia.');
+    }
+
+    let offset = 12;
+    let format = null;
+    let dataStart = -1;
+    let dataSize = 0;
+
+    while (offset + 8 <= wavBuffer.length) {
+      const chunkId = wavBuffer.toString('ascii', offset, offset + 4);
+      const chunkSize = wavBuffer.readUInt32LE(offset + 4);
+      const chunkDataStart = offset + 8;
+
+      if (chunkId === 'fmt ') {
+        format = {
+          audioFormat: wavBuffer.readUInt16LE(chunkDataStart),
+          channels: wavBuffer.readUInt16LE(chunkDataStart + 2),
+          sampleRate: wavBuffer.readUInt32LE(chunkDataStart + 4),
+          bitsPerSample: wavBuffer.readUInt16LE(chunkDataStart + 14)
+        };
+      } else if (chunkId === 'data') {
+        dataStart = chunkDataStart;
+        dataSize = chunkSize;
+        break;
+      }
+
+      offset = chunkDataStart + chunkSize + (chunkSize % 2);
+    }
+
+    if (!format || dataStart < 0) {
+      throw new Error('WAV response missing fmt or data chunk.');
+    }
+
+    if (format.audioFormat !== 1 || format.bitsPerSample !== 16) {
+      throw new Error(`Unsupported WAV format: format=${format.audioFormat}, bits=${format.bitsPerSample}`);
+    }
+
+    const sampleCount = Math.floor(dataSize / 2 / format.channels);
+    const samples = new Int16Array(sampleCount);
+
+    for (let i = 0; i < sampleCount; i++) {
+      let mixed = 0;
+      for (let ch = 0; ch < format.channels; ch++) {
+        const sampleOffset = dataStart + ((i * format.channels + ch) * 2);
+        mixed += wavBuffer.readInt16LE(sampleOffset);
+      }
+      samples[i] = Math.max(-32768, Math.min(32767, Math.round(mixed / format.channels)));
+    }
+
+    return {
+      samples,
+      sampleRate: format.sampleRate
+    };
+  }
+
+  resamplePcm16(samples, sourceRate, targetRate) {
+    if (sourceRate === targetRate) return samples;
+
+    const targetLength = Math.max(1, Math.round(samples.length * targetRate / sourceRate));
+    const resampled = new Int16Array(targetLength);
+    const ratio = sourceRate / targetRate;
+
+    for (let i = 0; i < targetLength; i++) {
+      const sourceIndex = i * ratio;
+      const leftIndex = Math.floor(sourceIndex);
+      const rightIndex = Math.min(samples.length - 1, leftIndex + 1);
+      const fraction = sourceIndex - leftIndex;
+      const left = samples[leftIndex] || 0;
+      const right = samples[rightIndex] || 0;
+      resampled[i] = Math.round(left + ((right - left) * fraction));
+    }
+
+    return resampled;
+  }
+
+  pcm16SampleToMulaw(sample) {
+    const BIAS = 0x84;
+    const CLIP = 32635;
+    let sign = 0;
+    let magnitude = sample;
+
+    if (magnitude < 0) {
+      magnitude = -magnitude;
+      sign = 0x80;
+    }
+
+    magnitude = Math.min(CLIP, magnitude) + BIAS;
+    let exponent = 7;
+    for (let mask = 0x4000; (magnitude & mask) === 0 && exponent > 0; mask >>= 1) {
+      exponent--;
+    }
+
+    const mantissa = (magnitude >> (exponent + 3)) & 0x0f;
+    return (~(sign | (exponent << 4) | mantissa)) & 0xff;
+  }
+
+  pcm16SamplesToMulawBuffer(samples) {
+    const mulawBuffer = Buffer.alloc(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      mulawBuffer[i] = this.pcm16SampleToMulaw(samples[i]);
+    }
+    return mulawBuffer;
+  }
+
+  /*
+   * Previous ElevenLabs TTS implementation kept commented for rollback/reference.
+   *
+  async synthesizeWithElevenLabs(cleanText) {
+    if (!this.elevenLabsApiKey) {
+      console.error('[ElevenLabs TTS] Missing API key in environment variables.');
+      this.statusCallbacks.onError('ElevenLabs API Key is missing.');
+      return false;
+    }
+
+    if (this.elevenLabsStreaming) {
+      const streamed = await this.synthesizeWithElevenLabsStreaming(cleanText);
+      if (streamed) return true;
+    }
+
+    return this.synthesizeWithElevenLabsRest(cleanText);
+  }
+
+  async synthesizeWithElevenLabsStreaming(cleanText) {
+    try {
+      console.log(`[ElevenLabs TTS] Streaming with ${this.elevenLabsModelId}, voice: ${this.elevenLabsVoiceId}`);
+      const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${this.elevenLabsVoiceId}/stream`);
+      url.searchParams.set('output_format', this.elevenLabsOutputFormat);
+      url.searchParams.set('optimize_streaming_latency', '3');
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': this.elevenLabsApiKey
+        },
+        body: JSON.stringify({
+          text: cleanText,
+          model_id: this.elevenLabsModelId,
+          voice_settings: {
+            stability: this.elevenLabsStability,
+            similarity_boost: this.elevenLabsSimilarityBoost
+          }
+        })
+      });
+
+      if (!response.ok || !response.body) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`ElevenLabs streaming HTTP error: ${response.status} ${errorBody}`);
+      }
+
+      const reader = response.body.getReader();
+      let totalBytesSent = 0;
+      const firstAudioAt = Date.now();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value || value.length === 0) continue;
+        if (this.isClosed || !this.isSpeaking) return false;
+
+        const audioChunk = Buffer.from(value);
+        totalBytesSent += audioChunk.length;
+        this.sendAudioToPlivo(audioChunk);
+      }
+
+      if (totalBytesSent === 0) {
+        throw new Error('ElevenLabs streaming returned no audio.');
+      }
+
+      const elapsedMs = Date.now() - firstAudioAt;
+      const estimatedPlaybackMs = Math.ceil((totalBytesSent / 8000) * 1000);
+      const remainingMs = Math.max(0, estimatedPlaybackMs - elapsedMs) + 250;
+
+      await new Promise((resolve) => setTimeout(resolve, remainingMs));
+
+      const secondsSent = (totalBytesSent / 8000).toFixed(2);
+      this.markAgentIdle(`[ElevenLabs TTS] Streamed audio to Plivo. Estimated playback ${secondsSent}s. Agent idle.`);
+      return true;
+    } catch (err) {
+      console.error('[ElevenLabs TTS] Streaming error:', err);
+      return false;
+    }
+  }
+
+  async synthesizeWithElevenLabsRest(cleanText) {
+    try {
+      console.log(`[ElevenLabs TTS] REST synthesizing with ${this.elevenLabsModelId}, voice: ${this.elevenLabsVoiceId}`);
+      const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${this.elevenLabsVoiceId}`);
+      url.searchParams.set('output_format', this.elevenLabsOutputFormat);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': this.elevenLabsApiKey
+        },
+        body: JSON.stringify({
+          text: cleanText,
+          model_id: this.elevenLabsModelId,
+          voice_settings: {
+            stability: this.elevenLabsStability,
+            similarity_boost: this.elevenLabsSimilarityBoost
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`ElevenLabs REST HTTP error: ${response.status} ${errorBody}`);
+      }
+
+      const audioBuffer = Buffer.from(await response.arrayBuffer());
+      if (audioBuffer.length === 0) {
+        throw new Error('ElevenLabs REST returned no audio.');
+      }
+
+      this.outboundAudioBuffer = Buffer.concat([this.outboundAudioBuffer, audioBuffer]);
+
+      if (!this.playbackInterval && this.isSpeaking) {
+        this.startOutboundPlaybackLoop();
+      }
+
+      return true;
+    } catch (err) {
+      console.error('[ElevenLabs TTS] REST error:', err);
+      return false;
+    }
+  }
+  */
+
   normalizeTranscript(text) {
     return text
-      .replace(/பிராண்டீனம்|பிராண்டீனம்னு|பிராண்டினம்|பிளாடினம்|பிளாட்டினம்‌/gi, 'பிளாட்டினம்')
-      .replace(/கோல்ட்|கோல்டு|கோல்ட்னு/gi, 'கோல்டு')
-      .replace(/சில்வர்|சில்வர்னு/gi, 'சில்வர்')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  clearSilenceTimer() {
+    if (this.silenceTimeout) {
+      clearTimeout(this.silenceTimeout);
+      this.silenceTimeout = null;
+    }
+  }
+
+  scheduleSilenceTimeout() {
+    this.clearSilenceTimer();
+    if (this.isClosed || this.endCallAfterSpeech) return;
+
+    this.silenceTimeout = setTimeout(() => {
+      if (this.isClosed || this.isSpeaking) return;
+      this.speakAndMaybeEnd('à®‰à®™à¯à®• response à®•à¯‡à®Ÿà¯à®•à®². Sales team contact à®ªà®£à¯à®£à¯à®µà®¾à®™à¯à®•. à®¨à®©à¯à®±à®¿.', true);
+    }, this.silenceTimeoutMs);
+  }
+
+  endCall() {
+    if (this.isClosed) return;
+    console.log('[Agent] Ending call by closing Plivo stream.');
+    if (this.plivoWs && this.plivoWs.readyState === WebSocket.OPEN) {
+      this.plivoWs.close(1000, 'Conversation completed');
+    }
+  }
+
+  markAgentIdle(logMessage) {
+    console.log(logMessage);
+    this.stopOutboundPlaybackLoop();
+    this.isSpeaking = false;
+    this.statusCallbacks.onStateChange('active');
+
+    if (this.endCallAfterSpeech) {
+      setTimeout(() => this.endCall(), 300);
+    } else {
+      this.scheduleSilenceTimeout();
+    }
+  }
+
+  async speakAndMaybeEnd(reply, shouldEnd = false) {
+    if (this.isClosed) return;
+    this.endCallAfterSpeech = shouldEnd;
+    this.isSpeaking = true;
+    this.outboundAudioBuffer = Buffer.alloc(0);
+    this.outboundBytesSent = 0;
+    this.history.push({ role: 'assistant', content: reply });
+    this.statusCallbacks.onAiTranscript(reply, true);
+    await this.synthesizeSpeech(reply);
   }
 
   /**
@@ -561,98 +603,17 @@ export class VoiceAgent {
     const words = normalized.split(/\s+/).filter(Boolean);
     const tamilCharCount = (normalized.match(/[\u0B80-\u0BFF]/g) || []).length;
 
-    const yesNoTamilSounds = [
-      'எஸ்',
-      'யெஸ்',
-      'எசு',
-      'ஓகே',
-      'ஹலோ',
-      'ஆமா',
-      'ஆம்',
-      'சரி',
-      'இல்லை',
-      'வேணாம்'
-    ];
-
-    if (yesNoTamilSounds.includes(text.trim())) return true;
+    if (/^(hmm|hm|um|uh|mmm|mm)$/i.test(normalized)) return false;
     if (words.length >= 3) return true;
-    if (tamilCharCount >= 4) return true;
+    if (normalized.length >= 3) return true;
     if (tamilCharCount > 0 && words.length >= 2) return true;
-
-    const allowedShortIntents = new Set([
-      'hi',
-      'hello',
-      'yes',
-      'yeah',
-      'ok',
-      'okay',
-      'no',
-      'sure',
-      'gold',
-      'silver',
-      'platinum',
-      'package',
-      'packages',
-      'appointment',
-      'scan',
-      'insurance',
-      'doctor',
-      'சரி',
-      'ஓகே',
-      'ஹலோ',
-      'ஆமா',
-      'ஆம்',
-      'இல்லை',
-      'வேண்டும்',
-      'சொல்லுங்க',
-      'வணக்கம்',
-      'கோல்டு',
-      'சில்வர்',
-      'பிளாட்டினம்'
-    ]);
-
-    if (allowedShortIntents.has(normalized)) return true;
+    if (/^\d{1,3}$/.test(normalized)) return true;
+    if (/^\d{1,2}(:\d{2})?\s?(am|pm)?$/i.test(normalized)) return true;
 
     return false;
   }
-
-  getFastReply(transcript) {
-    const normalized = transcript.trim().toLowerCase();
-    const lastAssistant = [...this.history].reverse().find((item) => item.role === 'assistant')?.content || '';
-
-    if (/(gold|கோல்டு)/i.test(normalized)) {
-      return 'Gold packageல scan, vitamin tests, doctor consultation இருக்கு. Booking பண்ணலாமா?';
-    }
-
-    if (/(silver|சில்வர்)/i.test(normalized)) {
-      return 'Silver basic full body checkup package. Booking பண்ணலாமா?';
-    }
-
-    if (/(platinum|பிளாட்டினம்)/i.test(normalized)) {
-      return 'Platinum advanced checkup package. Booking பண்ணலாமா?';
-    }
-
-    if (/(yes|yeah|ok|okay|sure|எஸ்|யெஸ்|ஓகே|ஆமா|ஆம்|சரி|சரிங்க|ம் சொல்லுங்க|சொல்லுங்க)/i.test(normalized)) {
-      if (/booking|book|Booking|name|பெயர்|உங்க name/i.test(lastAssistant)) {
-        return 'சரி, உங்க name சொல்லுங்க.';
-      }
-
-      if (/package|packages|Packages|Silver|Gold|Platinum|பேக்கேஜ்/i.test(lastAssistant)) {
-        return 'Silver, Gold, Platinum இருக்கு. எது பார்க்கணும்?';
-      }
-
-      return 'Packages பற்றி சொல்லட்டுமா?';
-    }
-
-    if (/(hi|hello|ஹலோ|வணக்கம்)/i.test(normalized) && this.history.length > 2) {
-      return 'சொல்லுங்க, எந்த package பார்க்கணும்?';
-    }
-
-    return null;
-  }
-
   /**
-   * Process a completed user utterance: sends context + history to OpenAI, then sends the response to Sarvam TTS.
+   * Process a completed user utterance: sends context + history to OpenAI, then sends the response to TTS.
    */
   async handleUserUtterance(transcript) {
     if (this.isClosed) return;
@@ -661,42 +622,30 @@ export class VoiceAgent {
     
     // Mark states
     this.isSpeaking = true;
-    this.cartesiaDone = false;
     this.outboundAudioBuffer = Buffer.alloc(0); // clear existing buffer
     this.outboundBytesSent = 0;
-    this.cartesiaContextId = generateUUID(); // fresh ID for this turn
     
     // Add user message to history
     this.history.push({ role: 'user', content: transcript });
 
     this.statusCallbacks.onStateChange('active');
+    this.clearSilenceTimer();
 
-    const fastReply = this.getFastReply(transcript);
-    if (fastReply) {
-      console.log(`[Agent] Fast reply: "${fastReply}"`);
-      this.history.push({ role: 'assistant', content: fastReply });
-      this.statusCallbacks.onAiTranscript(fastReply, true);
-      await this.synthesizeWithSarvam(fastReply);
-      return;
-    }
-
-    // Load dynamic system prompt and knowledge base from flat files
-    let systemPrompt = 'You are Katie, a warm and helpful voice assistant.';
-    let knowledgeBase = '';
-    try {
-      systemPrompt = fs.readFileSync(path.resolve('./system_prompt.txt'), 'utf8');
-      knowledgeBase = fs.readFileSync(path.resolve('./knowledge_base.txt'), 'utf8');
-    } catch (e) {
-      console.warn('[Agent] Could not load system prompt or knowledge base files, using default settings.');
-    }
+    const { systemPrompt, knowledgeBase } = this.loadAgentFiles();
 
     const voiceCostControlRules = `
 VOICE COST AND FLOW RULES:
-- Reply in Tamil/Tanglish like a Tamil Nadu hospital receptionist.
+- Follow the business, industry, flow, and tone from system_prompt.txt.
+- Use knowledge_base.txt as the only source of business facts.
 - Maximum 12 words per reply.
 - Ask exactly one question at the end.
-- Do not list all package details unless the caller asks.
-- If caller asks unknown details, say sales team will confirm and continue booking.
+- Understand meaning from natural Tamil/Tanglish, not exact yes/no keywords.
+- Detect positive, negative, continue, refusal, confusion, and question intent from context.
+- Treat phrases like "இல்லைங்க", "நா பண்ணல", "illanga", "pannala" as no.
+- Treat phrases like "ஆமாங்க", "சரி", "சொல்லுங்க", "okay", "pannirukken" as yes/continue when context fits.
+- Never ask the caller to say only yes or no.
+- Do not invent prices, services, slots, policies, addresses, or offers.
+- If the answer is not in the knowledge base, say the team will confirm.
 - Never repeat the same intro if already said.`;
 
     const combinedSystemContext = `${systemPrompt}\n\n${voiceCostControlRules}\n\nKNOWLEDGE BASE CONTEXT:\n${knowledgeBase}`;
@@ -722,20 +671,26 @@ VOICE COST AND FLOW RULES:
     let completeAiResponseText = '';
 
     try {
-      console.log(`[OpenAI] Querying model: ${this.openaiModelId}`);
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      console.log(`[OpenAI] Querying ${this.isAzureOpenAI ? 'Azure deployment' : 'model'}: ${this.openaiModelId}`);
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(this.isAzureOpenAI ? { 'api-key': openaiKey } : { 'Authorization': `Bearer ${openaiKey}` })
+      };
+      const body = {
+        messages: messages,
+        stream: true,
+        max_tokens: 40, // Keep TTS character usage and latency low.
+        temperature: 0.45
+      };
+
+      if (!this.isAzureOpenAI) {
+        body.model = this.openaiModelId;
+      }
+
+      const response = await fetch(this.openaiApiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiKey}`
-        },
-        body: JSON.stringify({
-          model: this.openaiModelId,
-          messages: messages,
-          stream: true,
-          max_tokens: 40, // Keep TTS character usage and latency low.
-          temperature: 0.45
-        }),
+        headers,
+        body: JSON.stringify(body),
         signal: this.currentLlmController.signal
       });
 
@@ -777,7 +732,7 @@ VOICE COST AND FLOW RULES:
       }
 
       if (completeAiResponseText.trim().length === 0) {
-        completeAiResponseText = 'சாரி, சரியா கேட்கல. இன்னொரு தடவை சொல்ல முடியுமா?';
+        completeAiResponseText = 'à®šà®¾à®°à®¿, à®šà®°à®¿à®¯à®¾ à®•à¯‡à®Ÿà¯à®•à®². à®‡à®©à¯à®©à¯Šà®°à¯ à®¤à®Ÿà®µà¯ˆ à®šà¯Šà®²à¯à®² à®®à¯à®Ÿà®¿à®¯à¯à®®à®¾?';
       }
 
       console.log(`[OpenAI] AI Complete Response: "${completeAiResponseText}"`);
@@ -789,7 +744,7 @@ VOICE COST AND FLOW RULES:
       }
 
       if (this.isSpeaking) {
-        await this.synthesizeWithSarvam(completeAiResponseText);
+        await this.synthesizeSpeech(completeAiResponseText);
       }
 
     } catch (err) {
@@ -797,10 +752,10 @@ VOICE COST AND FLOW RULES:
         console.log('[OpenAI] Stream aborted by user interruption.');
       } else {
         console.error('[OpenAI] Fetch completed with error:', err);
-        const fallbackText = 'சாரி, கொஞ்சம் technical issue இருக்கு. இன்னொரு தடவை சொல்ல முடியுமா?';
+        const fallbackText = 'Sorry, technical issue. Team contact pannuvanga.';
         this.history.push({ role: 'assistant', content: fallbackText });
         this.statusCallbacks.onAiTranscript(fallbackText, true);
-        if (this.isSpeaking) await this.synthesizeWithSarvam(fallbackText);
+        if (this.isSpeaking) await this.synthesizeSpeech(fallbackText);
       }
     } finally {
       this.currentLlmController = null;
@@ -827,10 +782,8 @@ VOICE COST AND FLOW RULES:
     const playbackMs = Math.ceil((audioToSend.length / bytesPerSecond) * 1000);
     this.playbackDoneTimeout = setTimeout(() => {
       const secondsSent = (this.outboundBytesSent / bytesPerSecond).toFixed(2);
-      console.log(`[Agent] Audio sent to Plivo. Estimated playback ${secondsSent}s. Agent idle.`);
       this.playbackDoneTimeout = null;
-      this.isSpeaking = false;
-      this.statusCallbacks.onStateChange('active');
+      this.markAgentIdle(`[Agent] Audio sent to Plivo. Estimated playback ${secondsSent}s. Agent idle.`);
     }, playbackMs + 250);
   }
 
@@ -872,15 +825,12 @@ VOICE COST AND FLOW RULES:
    */
   handleInterruption() {
     console.log('[Interruption] Barge-in! Stopping speech and clearing buffers.');
+    this.clearSilenceTimer();
 
     // 1. Mark states immediately to halt active streams
     this.isSpeaking = false;
-    this.cartesiaDone = false;
     this.stopOutboundPlaybackLoop();
     this.outboundAudioBuffer = Buffer.alloc(0);
-
-    // Orphan the current Cartesia context ID
-    this.cartesiaContextId = null;
 
     // 2. Cancel active LLM completion
     if (this.currentLlmController) {
@@ -939,19 +889,10 @@ VOICE COST AND FLOW RULES:
     this.isSpeaking = false;
 
     this.stopOutboundPlaybackLoop();
+    this.clearSilenceTimer();
 
     if (this.currentLlmController) {
       this.currentLlmController.abort();
-    }
-
-    if (this.deepgramWs) {
-      this.deepgramWs.close();
-      this.deepgramWs = null;
-    }
-
-    if (this.cartesiaWs) {
-      this.cartesiaWs.close();
-      this.cartesiaWs = null;
     }
 
     if (this.sarvamSttWs) {
@@ -964,3 +905,6 @@ VOICE COST AND FLOW RULES:
     }
   }
 }
+
+
+

@@ -1,7 +1,7 @@
 {
   "name": "voice-agent",
   "version": "1.0.0",
-  "description": "Bidirectional AI Voice Agent in Node.js using Plivo, Deepgram, OpenAI, and Cartesia",
+  "description": "Bidirectional AI Voice Agent in Node.js using Plivo, Sarvam STT, OpenAI, and ElevenLabs TTS",
   "type": "module",
   "main": "server.js",
   "scripts": {
