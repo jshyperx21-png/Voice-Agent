@@ -20,6 +20,7 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
+          passphrase: ${{ secrets.SERVER_PASSPHRASE }} # <-- This tells GitHub how to unlock your SSH key
           script: |
             # 1. Navigate to your correct project directory on the server
             cd /home/vilgax/voiceaget/Voice-Agent
