@@ -22,7 +22,7 @@ jobs:
           key: ${{ secrets.SERVER_KEY }}
           script: |
             # 1. Navigate to your project directory on the server
-            cd /path/to/your/project/folder
+            cd /home/vilgax/voiceaget
             
             # 2. Pull the newest changes from the main branch
             git pull origin main
