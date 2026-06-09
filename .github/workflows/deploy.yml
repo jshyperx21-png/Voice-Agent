@@ -1,6 +1,5 @@
 name: Deploy to Live Server
 
-# This triggers the workflow only when a push happens on the 'main' branch
 on:
   push:
     branches:
@@ -19,8 +18,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          passphrase: ${{ secrets.SERVER_PASSPHRASE }} # <-- This tells GitHub how to unlock your SSH key
+          key: ${{ secrets.SERVER_KEY }}   # <-- No passphrase line here anymore!
           script: |
             # 1. Navigate to your correct project directory on the server
             cd /home/vilgax/voiceaget/Voice-Agent
