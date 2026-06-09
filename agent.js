@@ -1,6 +1,7 @@
 ﻿import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 export class VoiceAgent {
   constructor(plivoWs, statusCallbacks) {
@@ -250,62 +251,123 @@ export class VoiceAgent {
       return false;
     }
 
-    try {
-      console.log(`[Cartesia TTS] Synthesizing with ${this.cartesiaModelId}, voice: ${this.cartesiaVoiceId}, language: ${this.cartesiaLanguage}`);
+    const contextId = randomUUID();
+    const ws = new WebSocket('wss://api.cartesia.ai/tts/websocket', {
+      headers: {
+        'Cartesia-Version': this.cartesiaVersion,
+        'X-API-Key': this.cartesiaApiKey
+      }
+    });
 
-      const response = await fetch('https://api.cartesia.ai/tts/bytes', {
-        method: 'POST',
-        headers: {
-          'Cartesia-Version': this.cartesiaVersion,
-          'X-API-Key': this.cartesiaApiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+    let totalBytesSent = 0;
+    let pcmRemainder = Buffer.alloc(0);
+    const startedAt = Date.now();
+
+    console.log(`[Cartesia TTS] Streaming with ${this.cartesiaModelId}, voice: ${this.cartesiaVoiceId}, language: ${this.cartesiaLanguage}`);
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+
+        if (ok && totalBytesSent > 0 && this.isSpeaking && !this.isClosed) {
+          const elapsedMs = Date.now() - startedAt;
+          const playbackMs = Math.ceil((totalBytesSent / 8000) * 1000);
+          const remainingMs = Math.max(0, playbackMs - elapsedMs) + 250;
+
+          setTimeout(() => {
+            const secondsSent = (totalBytesSent / 8000).toFixed(2);
+            this.markAgentIdle(`[Cartesia TTS] Streamed audio to Plivo. Estimated playback ${secondsSent}s. Agent idle.`);
+            resolve(true);
+          }, remainingMs);
+          return;
+        }
+
+        resolve(ok);
+      };
+
+      const timeout = setTimeout(() => {
+        console.error('[Cartesia TTS] Timed out waiting for audio.');
+        finish(false);
+      }, 30000);
+
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
           model_id: this.cartesiaModelId,
           transcript: cleanText,
           voice: {
             mode: 'id',
             id: this.cartesiaVoiceId
           },
-          output_format: {
-            container: 'wav',
-            encoding: 'pcm_s16le',
-            sample_rate: 44100
-          },
           language: this.cartesiaLanguage,
+          context_id: contextId,
+          output_format: {
+            container: 'raw',
+            encoding: 'pcm_s16le',
+            sample_rate: 8000
+          },
           generation_config: {
             speed: this.cartesiaSpeed,
             volume: this.cartesiaVolume,
             emotion: this.cartesiaEmotion
-          }
-        })
+          },
+          continue: false
+        }));
       });
 
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => '');
-        throw new Error(`Cartesia HTTP error: ${response.status} ${errorBody}`);
-      }
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
 
-      const wavBuffer = Buffer.from(await response.arrayBuffer());
-      const pcm = this.extractPcm16FromWav(wavBuffer);
-      const pcm8k = this.resamplePcm16(pcm.samples, pcm.sampleRate, 8000);
-      const mulawAudio = this.pcm16SamplesToMulawBuffer(pcm8k);
+          if (message.type === 'error' || message.status_code >= 400) {
+            console.error('[Cartesia TTS] API error:', message);
+            clearTimeout(timeout);
+            finish(false);
+            return;
+          }
 
-      if (mulawAudio.length === 0) {
-        throw new Error('Cartesia returned no playable audio.');
-      }
+          if (message.type === 'chunk' && message.data) {
+            const pcmChunk = Buffer.from(message.data, 'base64');
+            const combined = pcmRemainder.length > 0 ? Buffer.concat([pcmRemainder, pcmChunk]) : pcmChunk;
+            const safeLength = combined.length - (combined.length % 2);
+            const playablePcm = combined.subarray(0, safeLength);
+            pcmRemainder = combined.subarray(safeLength);
 
-      this.outboundAudioBuffer = Buffer.concat([this.outboundAudioBuffer, mulawAudio]);
+            if (playablePcm.length > 0 && this.isSpeaking && !this.isClosed) {
+              const mulawAudio = this.pcm16BufferToMulawBuffer(playablePcm);
+              totalBytesSent += mulawAudio.length;
+              this.sendAudioToPlivo(mulawAudio);
+            }
+          }
 
-      if (!this.playbackInterval && this.isSpeaking) {
-        this.startOutboundPlaybackLoop();
-      }
+          if (message.type === 'done' || message.done === true) {
+            clearTimeout(timeout);
+            finish(totalBytesSent > 0);
+          }
+        } catch (err) {
+          console.error('[Cartesia TTS] Error parsing WebSocket message:', err);
+          clearTimeout(timeout);
+          finish(false);
+        }
+      });
 
-      return true;
-    } catch (err) {
-      console.error('[Cartesia TTS] Error:', err);
-      return false;
-    }
+      ws.on('error', (err) => {
+        console.error('[Cartesia TTS] WebSocket error:', err);
+        clearTimeout(timeout);
+        finish(false);
+      });
+
+      ws.on('close', () => {
+        clearTimeout(timeout);
+        if (!settled) finish(totalBytesSent > 0);
+      });
+    });
   }
 
   extractPcm16FromWav(wavBuffer) {
@@ -417,6 +479,17 @@ export class VoiceAgent {
     for (let i = 0; i < samples.length; i++) {
       mulawBuffer[i] = this.pcm16SampleToMulaw(samples[i]);
     }
+    return mulawBuffer;
+  }
+
+  pcm16BufferToMulawBuffer(pcmBuffer) {
+    const sampleCount = Math.floor(pcmBuffer.length / 2);
+    const mulawBuffer = Buffer.alloc(sampleCount);
+
+    for (let i = 0; i < sampleCount; i++) {
+      mulawBuffer[i] = this.pcm16SampleToMulaw(pcmBuffer.readInt16LE(i * 2));
+    }
+
     return mulawBuffer;
   }
 
