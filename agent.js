@@ -119,7 +119,7 @@ export class VoiceAgent {
       return greetingLine.replace(/^GREETING\s*:/i, '').trim();
     }
 
-    return 'à®µà®£à®•à¯à®•à®®à¯, à®¨à®¾à®©à¯ AI assistant à®ªà¯‡à®šà¯à®±à¯‡à®©à¯. à®Žà®ªà¯à®ªà®Ÿà®¿ help à®ªà®£à¯à®£à®²à®¾à®®à¯?';
+    return 'Vanakkam, naan AI assistant pesuren. Eppadi help pannalam?';
   }
 
   /**
@@ -565,7 +565,7 @@ export class VoiceAgent {
 
     this.silenceTimeout = setTimeout(() => {
       if (this.isClosed || this.isSpeaking) return;
-      this.speakAndMaybeEnd('à®‰à®™à¯à®• response à®•à¯‡à®Ÿà¯à®•à®². Sales team contact à®ªà®£à¯à®£à¯à®µà®¾à®™à¯à®•. à®¨à®©à¯à®±à®¿.', true);
+      this.speakAndMaybeEnd('Ungal response kekkala. Sales team contact pannuvanga. Nandri.', true);
     }, this.silenceTimeoutMs);
   }
 
@@ -608,8 +608,19 @@ export class VoiceAgent {
     const normalized = text.trim().toLowerCase();
     const words = normalized.split(/\s+/).filter(Boolean);
     const tamilCharCount = (normalized.match(/[\u0B80-\u0BFF]/g) || []).length;
+    const shortTamilIntents = new Set([
+      '\u0BAE\u0BCD', // ம்
+      '\u0BAE\u0BCD\u0BAE\u0BCD', // ம்ம்
+      '\u0B86', // ஆ
+      '\u0B86\u0BAE\u0BCD', // ஆம்
+      '\u0B86\u0BAE\u0BBE', // ஆமா
+      '\u0B9A\u0BB0\u0BBF', // சரி
+      '\u0B87\u0BB2\u0BCD\u0BB2\u0BC8', // இல்லை
+      '\u0B93\u0B95\u0BC7' // ஓகே
+    ]);
 
     if (/^(hmm|hm|um|uh|mmm|mm)$/i.test(normalized)) return false;
+    if (shortTamilIntents.has(normalized)) return true;
     if (words.length >= 3) return true;
     if (normalized.length >= 3) return true;
     if (tamilCharCount > 0 && words.length >= 2) return true;
@@ -738,7 +749,7 @@ VOICE COST AND FLOW RULES:
       }
 
       if (completeAiResponseText.trim().length === 0) {
-        completeAiResponseText = 'à®šà®¾à®°à®¿, à®šà®°à®¿à®¯à®¾ à®•à¯‡à®Ÿà¯à®•à®². à®‡à®©à¯à®©à¯Šà®°à¯ à®¤à®Ÿà®µà¯ˆ à®šà¯Šà®²à¯à®² à®®à¯à®Ÿà®¿à®¯à¯à®®à®¾?';
+        completeAiResponseText = 'Sorry, sariyaa kekkala. Innum oru thadava sollunga.';
       }
 
       console.log(`[OpenAI] AI Complete Response: "${completeAiResponseText}"`);
