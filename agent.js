@@ -41,7 +41,9 @@ export class VoiceAgent {
     // Load voice config
     this.openaiModelId = process.env.OPENAI_MODEL || 'gpt-4.1';
     this.openaiApiUrl = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
-    this.isAzureOpenAI = process.env.OPENAI_PROVIDER === 'azure' || this.openaiApiUrl.includes('.openai.azure.com');
+    this.openaiProvider = process.env.OPENAI_PROVIDER || 'openai';
+    this.isResponsesApi = /\/responses(?:\?|$)/.test(this.openaiApiUrl);
+    this.isAzureOpenAI = this.openaiProvider.startsWith('azure') || this.openaiApiUrl.includes('.openai.azure.com') || this.openaiApiUrl.includes('.services.ai.azure.com');
     this.enableBargeIn = process.env.ENABLE_BARGE_IN === 'true';
     // Previous ElevenLabs TTS config kept for rollback/reference.
     // this.elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
@@ -837,6 +839,20 @@ export class VoiceAgent {
 
     return false;
   }
+
+  extractOpenAIStreamToken(data) {
+    if (!data || typeof data !== 'object') return '';
+
+    if (typeof data.delta === 'string') return data.delta;
+    if (typeof data.text === 'string' && data.type === 'response.output_text.delta') return data.text;
+    if (typeof data.output_text === 'string') return data.output_text;
+
+    const outputContent = data.response?.output?.[0]?.content?.[0];
+    if (typeof outputContent?.text === 'string') return outputContent.text;
+
+    return data.choices?.[0]?.delta?.content || '';
+  }
+
   /**
    * Process a completed user utterance: sends context + history to OpenAI, then sends the response to TTS.
    */
@@ -869,6 +885,7 @@ VOICE COST AND FLOW RULES:
 - Treat phrases like "இல்லைங்க", "நா பண்ணல", "illanga", "pannala" as no.
 - Treat phrases like "ஆமாங்க", "சரி", "சொல்லுங்க", "okay", "pannirukken" as yes/continue when context fits.
 - Never ask the caller to say only yes or no.
+- Prefer 6-8 words. Never give long explanations unless caller asks.
 - Do not invent prices, services, slots, policies, addresses, or offers.
 - If the answer is not in the knowledge base, say the team will confirm.
 - Never repeat the same intro if already said.`;
@@ -896,19 +913,26 @@ VOICE COST AND FLOW RULES:
     let completeAiResponseText = '';
 
     try {
-      console.log(`[OpenAI] Querying ${this.isAzureOpenAI ? 'Azure deployment' : 'model'}: ${this.openaiModelId}`);
+      console.log(`[OpenAI] Querying ${this.isResponsesApi ? 'responses endpoint' : this.isAzureOpenAI ? 'Azure deployment' : 'model'}: ${this.openaiModelId}`);
       const headers = {
         'Content-Type': 'application/json',
         ...(this.isAzureOpenAI ? { 'api-key': openaiKey } : { 'Authorization': `Bearer ${openaiKey}` })
       };
-      const body = {
-        messages: messages,
-        stream: true,
-        max_tokens: 40, // Keep TTS character usage and latency low.
-        temperature: 0.45
-      };
+      const body = this.isResponsesApi
+        ? {
+          input: messages,
+          stream: true,
+          max_output_tokens: 32,
+          temperature: 0.35
+        }
+        : {
+          messages: messages,
+          stream: true,
+          max_tokens: 32,
+          temperature: 0.35
+        };
 
-      if (!this.isAzureOpenAI) {
+      if (!this.isAzureOpenAI && !this.isResponsesApi) {
         body.model = this.openaiModelId;
       }
 
@@ -942,7 +966,7 @@ VOICE COST AND FLOW RULES:
           if (cleanedLine.startsWith('data: ')) {
             try {
               const data = JSON.parse(cleanedLine.substring(6));
-              const token = data.choices?.[0]?.delta?.content || '';
+              const token = this.extractOpenAIStreamToken(data);
               if (token) {
                 completeAiResponseText += token;
                 
