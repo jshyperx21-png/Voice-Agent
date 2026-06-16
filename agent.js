@@ -51,17 +51,27 @@ export class VoiceAgent {
     // this.elevenLabsStreaming = process.env.ELEVENLABS_TTS_STREAMING !== 'false';
     // this.elevenLabsStability = Number(process.env.ELEVENLABS_STABILITY || 0.5);
     // this.elevenLabsSimilarityBoost = Number(process.env.ELEVENLABS_SIMILARITY_BOOST || 0.75);
-    this.cartesiaApiKey = process.env.CARTESIA_API_KEY;
-    this.cartesiaModelId = process.env.CARTESIA_MODEL_ID || 'sonic-3.5';
-    this.cartesiaVoiceId = process.env.CARTESIA_VOICE_ID || '25d2c432-139c-4035-bfd6-9baaabcdd006';
-    this.cartesiaLanguage = process.env.CARTESIA_LANGUAGE || 'ta';
-    this.cartesiaVersion = process.env.CARTESIA_VERSION || '2026-03-01';
-    this.cartesiaSpeed = Number(process.env.CARTESIA_SPEED || 1);
-    this.cartesiaVolume = Number(process.env.CARTESIA_VOLUME || 1);
-    this.cartesiaEmotion = process.env.CARTESIA_EMOTION || 'calm';
+    // Previous Cartesia TTS config kept for rollback/reference.
+    // this.cartesiaApiKey = process.env.CARTESIA_API_KEY;
+    // this.cartesiaModelId = process.env.CARTESIA_MODEL_ID || 'sonic-3.5';
+    // this.cartesiaVoiceId = process.env.CARTESIA_VOICE_ID || '25d2c432-139c-4035-bfd6-9baaabcdd006';
+    // this.cartesiaLanguage = process.env.CARTESIA_LANGUAGE || 'ta';
+    // this.cartesiaVersion = process.env.CARTESIA_VERSION || '2026-03-01';
+    // this.cartesiaSpeed = Number(process.env.CARTESIA_SPEED || 1);
+    // this.cartesiaVolume = Number(process.env.CARTESIA_VOLUME || 1);
+    // this.cartesiaEmotion = process.env.CARTESIA_EMOTION || 'calm';
     this.sarvamApiKey = process.env.SARVAM_API_KEY;
     this.sarvamSttLanguage = process.env.SARVAM_STT_LANGUAGE || 'ta-IN';
     this.sarvamSttMode = process.env.SARVAM_STT_MODE || 'codemix';
+    this.sarvamTtsApiKey = process.env.SARVAM_TTS_API_KEY || this.sarvamApiKey;
+    this.sarvamTtsModel = process.env.SARVAM_TTS_MODEL || 'bulbul:v3';
+    this.sarvamTtsLanguage = process.env.SARVAM_TTS_LANGUAGE || 'ta-IN';
+    this.sarvamTtsSpeaker = process.env.SARVAM_TTS_SPEAKER || 'anushka';
+    this.sarvamTtsPace = Number(process.env.SARVAM_TTS_PACE || 1);
+    this.sarvamTtsMinBufferSize = Number(process.env.SARVAM_TTS_MIN_BUFFER_SIZE || 50);
+    this.sarvamTtsMaxChunkLength = Number(process.env.SARVAM_TTS_MAX_CHUNK_LENGTH || 200);
+    this.sarvamTtsAudioCodec = process.env.SARVAM_TTS_AUDIO_CODEC || 'mulaw';
+    this.sarvamTtsSampleRate = Number(process.env.SARVAM_TTS_SAMPLE_RATE || 8000);
   }
 
   /**
@@ -237,11 +247,136 @@ export class VoiceAgent {
   async synthesizeSpeech(text) {
     const cleanText = text.replace(/\s+/g, ' ').trim();
     if (!cleanText || this.isClosed || !this.isSpeaking) return false;
-    const synthesized = await this.synthesizeWithCartesia(cleanText);
+    const synthesized = await this.synthesizeWithSarvam(cleanText);
     if (!synthesized && this.isSpeaking && !this.isClosed) {
-      this.markAgentIdle('[Cartesia TTS] Failed to synthesize audio. Agent idle.');
+      this.markAgentIdle('[Sarvam TTS] Failed to synthesize audio. Agent idle.');
     }
     return synthesized;
+  }
+
+  async synthesizeWithSarvam(cleanText) {
+    if (!this.sarvamTtsApiKey) {
+      console.error('[Sarvam TTS] Missing API key in environment variables.');
+      this.statusCallbacks.onError('Sarvam TTS API Key is missing.');
+      return false;
+    }
+
+    const params = new URLSearchParams({
+      model: this.sarvamTtsModel,
+      send_completion_event: 'true'
+    });
+    const ws = new WebSocket(`wss://api.sarvam.ai/text-to-speech/ws?${params.toString()}`, {
+      headers: {
+        'api-subscription-key': this.sarvamTtsApiKey
+      }
+    });
+
+    let totalBytesSent = 0;
+    const startedAt = Date.now();
+
+    console.log(`[Sarvam TTS] Streaming with ${this.sarvamTtsModel}, speaker: ${this.sarvamTtsSpeaker}, language: ${this.sarvamTtsLanguage}`);
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+
+        if (ok && totalBytesSent > 0 && this.isSpeaking && !this.isClosed) {
+          const elapsedMs = Date.now() - startedAt;
+          const playbackMs = Math.ceil((totalBytesSent / this.sarvamTtsSampleRate) * 1000);
+          const remainingMs = Math.max(0, playbackMs - elapsedMs) + 250;
+
+          setTimeout(() => {
+            const secondsSent = (totalBytesSent / this.sarvamTtsSampleRate).toFixed(2);
+            this.markAgentIdle(`[Sarvam TTS] Streamed audio to Plivo. Estimated playback ${secondsSent}s. Agent idle.`);
+            resolve(true);
+          }, remainingMs);
+          return;
+        }
+
+        resolve(ok);
+      };
+
+      const timeout = setTimeout(() => {
+        console.error('[Sarvam TTS] Timed out waiting for audio.');
+        finish(false);
+      }, 30000);
+
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
+          type: 'config',
+          data: {
+            speaker: this.sarvamTtsSpeaker,
+            target_language_code: this.sarvamTtsLanguage,
+            pace: this.sarvamTtsPace,
+            min_buffer_size: this.sarvamTtsMinBufferSize,
+            max_chunk_length: this.sarvamTtsMaxChunkLength,
+            output_audio_codec: this.sarvamTtsAudioCodec,
+            speech_sample_rate: this.sarvamTtsSampleRate
+          }
+        }));
+
+        ws.send(JSON.stringify({
+          type: 'text',
+          data: {
+            text: cleanText
+          }
+        }));
+
+        ws.send(JSON.stringify({
+          type: 'flush'
+        }));
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+
+          if (message.type === 'error' || message.error || message.data?.error) {
+            console.error('[Sarvam TTS] API error:', message);
+            clearTimeout(timeout);
+            finish(false);
+            return;
+          }
+
+          const audioBase64 = message.data?.audio || message.audio || message.data?.audio_chunk;
+          if (audioBase64) {
+            const audioChunk = Buffer.from(audioBase64, 'base64');
+            if (audioChunk.length > 0 && this.isSpeaking && !this.isClosed) {
+              totalBytesSent += audioChunk.length;
+              this.sendAudioToPlivo(audioChunk);
+            }
+          }
+
+          const eventType = message.data?.event_type || message.event_type || message.type;
+          if (eventType === 'final' || eventType === 'completed' || eventType === 'done' || message.done === true) {
+            clearTimeout(timeout);
+            finish(totalBytesSent > 0);
+          }
+        } catch (err) {
+          console.error('[Sarvam TTS] Error parsing WebSocket message:', err);
+          clearTimeout(timeout);
+          finish(false);
+        }
+      });
+
+      ws.on('error', (err) => {
+        console.error('[Sarvam TTS] WebSocket error:', err);
+        clearTimeout(timeout);
+        finish(false);
+      });
+
+      ws.on('close', () => {
+        clearTimeout(timeout);
+        if (!settled) finish(totalBytesSent > 0);
+      });
+    });
   }
 
   async synthesizeWithCartesia(cleanText) {
