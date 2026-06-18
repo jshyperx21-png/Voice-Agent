@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { VoiceAgent } from './agent.js';
@@ -12,23 +13,32 @@ const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
-// Global Call State tracking
-let callState = {
-  status: 'idle', // idle, ringing, active, ended
-  duration: 0,
-  outcome: 'No calls yet',
-  plivoNumber: process.env.PLIVO_NUMBER || '+1234567890'
-};
+// ── Phase 5: Concurrent call support ─────────────────────────────────────────
+// Map<agentId (UUID), VoiceAgent> — supports unlimited simultaneous calls.
+// Previously: let activeAgent = null (single-call only).
+const activeAgents = new Map();
 
-let activeAgent = null;
-let callStartTime = null;
-let callTimerInterval = null;
-
-// Sets of connected WebSocket browser clients for dashboard real-time updates
+// Dashboard UI clients
 const browserClients = new Set();
 
+// Call start timestamps for duration tracking (keyed by agentId)
+const callStartTimes = new Map();
+
+// Global call state for dashboard display (last call wins for single-dashboard simplicity)
+let callState = {
+  status: 'idle',
+  duration: 0,
+  outcome: 'No calls yet',
+  plivoNumber: process.env.PLIVO_NUMBER || '+1234567890',
+  activeCalls: 0
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Helper to broadcast JSON messages to all active browser dashboards
+ * Broadcast a JSON message to all connected browser dashboard clients.
  */
 function broadcastToBrowsers(data) {
   const payload = JSON.stringify(data);
@@ -39,25 +49,23 @@ function broadcastToBrowsers(data) {
   }
 }
 
-// -------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Express Routes
-// -------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * POST /webhook - Executed by Plivo when the caller dials our number.
- * Returns XML instruction opening a secure WebSocket audio stream to our server.
+ * POST /webhook — Executed by Plivo when a caller dials our number.
+ * Returns XML instruction opening a secure WebSocket audio stream.
  */
 app.post('/webhook', (req, res) => {
   console.log('[Plivo Webhook] Received call notification.');
-  
-  // Resolve host dynamically so ngrok or deployment URLs work out-of-the-box
+
   const host = req.headers.host;
   const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'wss' : 'ws';
   const wsUrl = `${protocol}://${host}/stream`;
 
   console.log(`[Plivo Webhook] Dynamic Stream Destination: ${wsUrl}`);
 
-  // Return standard Plivo Voice Stream XML
   res.set('Content-Type', 'text/xml');
   res.send(`
     <Response>
@@ -65,23 +73,20 @@ app.post('/webhook', (req, res) => {
     </Response>
   `.trim());
 
-  // Set status to ringing
   callState.status = 'ringing';
   callState.outcome = 'Call connecting...';
   broadcastToBrowsers({ event: 'status-update', state: callState });
 });
 
 /**
- * GET /api/config - Fetch prompt and knowledge base text
+ * GET /api/config — Fetch system prompt and knowledge base text.
  */
 app.get('/api/config', (req, res) => {
   try {
     const promptPath = path.resolve('./system_prompt.txt');
     const kbPath = path.resolve('./knowledge_base.txt');
-
     const system_prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
     const knowledge_base = fs.existsSync(kbPath) ? fs.readFileSync(kbPath, 'utf8') : '';
-
     res.json({ system_prompt, knowledge_base });
   } catch (error) {
     res.status(500).json({ error: 'Failed to read config files.' });
@@ -89,34 +94,73 @@ app.get('/api/config', (req, res) => {
 });
 
 /**
- * POST /api/config - Save system prompt and knowledge base updates
+ * POST /api/config — Save system prompt and knowledge base updates.
+ * Phase 2: Also hot-reloads config on ALL active agents without restart.
  */
 app.post('/api/config', (req, res) => {
   try {
     const { system_prompt, knowledge_base } = req.body;
-    
     fs.writeFileSync(path.resolve('./system_prompt.txt'), system_prompt || '', 'utf8');
     fs.writeFileSync(path.resolve('./knowledge_base.txt'), knowledge_base || '', 'utf8');
-    
     console.log('[Config] Prompt and Knowledge Base updated successfully from UI.');
-    res.json({ success: true });
+
+    // Phase 2: Hot-reload config on every active call agent
+    let reloaded = 0;
+    for (const agent of activeAgents.values()) {
+      agent.reloadConfig();
+      reloaded++;
+    }
+    if (reloaded > 0) {
+      console.log(`[Config] Hot-reloaded config on ${reloaded} active call agent(s).`);
+    }
+
+    res.json({ success: true, activeAgentsReloaded: reloaded });
   } catch (error) {
     res.status(500).json({ error: 'Failed to save config files.' });
   }
 });
 
-// -------------------------------------------------------------
-// WebSocket Servers Hook
-// -------------------------------------------------------------
-const server = createServer(app);
+/**
+ * GET /health — Health check endpoint for monitoring and load balancers.
+ * Phase 5: Returns live call count and server uptime.
+ */
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    activeCalls: activeAgents.size,
+    uptimeSeconds: Math.round(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
 
+/**
+ * GET /api/calls — List all active call agent IDs.
+ * Phase 5: Useful for monitoring concurrent calls.
+ */
+app.get('/api/calls', (req, res) => {
+  const calls = [];
+  for (const [agentId, agent] of activeAgents.entries()) {
+    const startTime = callStartTimes.get(agentId);
+    calls.push({
+      agentId,
+      streamId: agent.streamId,
+      durationSeconds: startTime ? Math.round((Date.now() - startTime) / 1000) : 0,
+      isSpeaking: agent.isSpeaking
+    });
+  }
+  res.json({ activeCalls: calls.length, calls });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket Servers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const server = createServer(app);
 const wssStream = new WebSocketServer({ noServer: true });
 const wssStatus = new WebSocketServer({ noServer: true });
 
-// Handle WebSocket upgrades for separate routes
 server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url, `http://${request.headers.host}`);
-
   if (pathname === '/stream') {
     wssStream.handleUpgrade(request, socket, head, (ws) => {
       wssStream.emit('connection', ws, request);
@@ -130,14 +174,15 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-// -------------------------------------------------------------
-// Dashboard WebSocket Handler (/status)
-// -------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard WebSocket (/status)
+// ─────────────────────────────────────────────────────────────────────────────
+
 wssStatus.on('connection', (ws) => {
   console.log('[Dashboard] New Web UI client connected.');
   browserClients.add(ws);
 
-  // Send current state immediately on connection
+  // Send current state on connect
   ws.send(JSON.stringify({ event: 'status-update', state: callState }));
 
   ws.on('close', () => {
@@ -146,62 +191,52 @@ wssStatus.on('connection', (ws) => {
   });
 });
 
-// -------------------------------------------------------------
-// Plivo Call Stream WebSocket Handler (/stream)
-// -------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Plivo Call Stream WebSocket (/stream)
+// Phase 5: Each call gets a unique agentId and is stored in activeAgents Map
+// ─────────────────────────────────────────────────────────────────────────────
+
 wssStream.on('connection', (ws, req) => {
-  console.log('[Plivo Stream] Caller connected over WebSocket.');
+  // Phase 5: Assign a unique ID to this call
+  const agentId = randomUUID();
+  console.log(`[Plivo Stream] New caller connected. Agent ID: ${agentId}`);
 
-  // Clean up any lingering active agent instance
-  if (activeAgent) {
-    activeAgent.close();
-    activeAgent = null;
-  }
-
-  // Setup heartbeat ping-pong interval to preserve active calls on gateways
+  // Heartbeat ping to keep connection alive through gateways
   const pingInterval = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.ping();
-    }
+    if (ws.readyState === WebSocket.OPEN) ws.ping();
   }, 10000);
 
-  // Create the Voice Agent logic pipeline
+  // Create the Voice Agent pipeline for this call
   const agent = new VoiceAgent(ws, {
     onStateChange: (state) => {
-      // E.g. when agent starts speaking or goes back to active listening
       if (callState.status !== 'ended') {
-        broadcastToBrowsers({ event: 'agent-speaking', isSpeaking: agent.isSpeaking });
+        broadcastToBrowsers({ event: 'agent-speaking', isSpeaking: agent.isSpeaking, agentId });
       }
     },
     onUserTranscript: (text, isFinal) => {
-      broadcastToBrowsers({ event: 'user-transcript', text, isFinal });
+      broadcastToBrowsers({ event: 'user-transcript', text, isFinal, agentId });
     },
     onAiTranscript: (text, isFinal) => {
-      broadcastToBrowsers({ event: 'ai-transcript', text, isFinal });
+      broadcastToBrowsers({ event: 'ai-transcript', text, isFinal, agentId });
     },
     onInterruption: () => {
-      broadcastToBrowsers({ event: 'interruption' });
+      broadcastToBrowsers({ event: 'interruption', agentId });
     },
     onError: (errMsg) => {
-      console.error('[Agent Error]', errMsg);
-      broadcastToBrowsers({ event: 'error', message: errMsg });
+      console.error(`[Agent Error] [${agentId}]`, errMsg);
+      broadcastToBrowsers({ event: 'error', message: errMsg, agentId });
     }
   });
 
-  activeAgent = agent;
-  callStartTime = Date.now();
+  // Phase 5: Register in concurrent agents Map
+  activeAgents.set(agentId, agent);
+  callStartTimes.set(agentId, Date.now());
+
   callState.status = 'ringing';
   callState.duration = 0;
   callState.outcome = 'Call established';
+  callState.activeCalls = activeAgents.size;
   broadcastToBrowsers({ event: 'status-update', state: callState });
-
-  // Start call timer tracking
-  if (callTimerInterval) clearInterval(callTimerInterval);
-  callTimerInterval = setInterval(() => {
-    if (callStartTime) {
-      callState.duration = Math.round((Date.now() - callStartTime) / 1000);
-    }
-  }, 1000);
 
   ws.on('message', (data) => {
     try {
@@ -209,77 +244,83 @@ wssStream.on('connection', (ws, req) => {
 
       switch (message.event) {
         case 'start':
-          console.log('[Plivo Stream] Call Stream started. ID:', message.start?.streamId);
+          console.log(`[Plivo Stream] [${agentId}] Call stream started. Plivo StreamID: ${message.start?.streamId}`);
           agent.setStreamId(message.start?.streamId);
-          
+
           callState.status = 'active';
+          callState.activeCalls = activeAgents.size;
           broadcastToBrowsers({ event: 'status-update', state: callState });
 
-          // Establish the Sarvam STT stream and start the agent.
           agent.start();
           break;
 
         case 'media':
-          // Catch and assign stream ID from media packets if start packet was delayed
+          // Catch and assign streamId from media packets if start packet was delayed
           if (!agent.streamId && message.streamId) {
             agent.setStreamId(message.streamId);
           }
-          // Feed the inbound G.711 mu-law audio chunk to Sarvam STT.
           if (message.media?.payload) {
             agent.handleInboundAudio(message.media.payload);
           }
           break;
 
         case 'stop':
-          console.log('[Plivo Stream] Call stop event received.');
-          handleCallTeardown('Ended normally');
+          console.log(`[Plivo Stream] [${agentId}] Call stop event received.`);
+          handleCallTeardown(agentId, 'Ended normally');
           break;
       }
     } catch (err) {
-      console.error('[Plivo Stream] Error processing incoming payload:', err);
+      console.error(`[Plivo Stream] [${agentId}] Error processing incoming payload:`, err);
     }
   });
 
-  // Handle errors and normal disconnection teardowns
   ws.on('close', (code, reason) => {
-    console.log(`[Plivo Stream] Telephony WebSocket closed. Code: ${code}, Reason: ${reason}`);
-    handleCallTeardown('Call disconnected');
+    console.log(`[Plivo Stream] [${agentId}] WebSocket closed. Code: ${code}, Reason: ${reason}`);
+    handleCallTeardown(agentId, 'Call disconnected');
   });
 
   ws.on('error', (err) => {
-    console.error('[Plivo Stream] Connection error:', err);
-    handleCallTeardown('Error occurred');
+    console.error(`[Plivo Stream] [${agentId}] Connection error:`, err);
+    handleCallTeardown(agentId, 'Error occurred');
   });
 
-  function handleCallTeardown(outcomeText) {
+  /**
+   * Phase 5: Per-call teardown.
+   * Removes from Map and broadcasts updated state.
+   */
+  function handleCallTeardown(id, outcomeText) {
     clearInterval(pingInterval);
-    if (callTimerInterval) {
-      clearInterval(callTimerInterval);
-      callTimerInterval = null;
+
+    const agentToClose = activeAgents.get(id);
+    if (agentToClose) {
+      agentToClose.close();
+      activeAgents.delete(id);
     }
 
-    if (agent === activeAgent) {
-      agent.close();
-      activeAgent = null;
-    }
+    const startTime = callStartTimes.get(id);
+    const callDuration = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
+    callStartTimes.delete(id);
 
-    if (callState.status !== 'ended') {
-      const callDuration = callStartTime ? Math.round((Date.now() - callStartTime) / 1000) : 0;
-      callState.status = 'ended';
-      callState.duration = callDuration;
-      callState.outcome = `${outcomeText} (Duration: ${callDuration}s)`;
+    callState.status = activeAgents.size > 0 ? 'active' : 'ended';
+    callState.duration = callDuration;
+    callState.outcome = `${outcomeText} (Duration: ${callDuration}s)`;
+    callState.activeCalls = activeAgents.size;
 
-      broadcastToBrowsers({ event: 'status-update', state: callState });
-      console.log(`[Call ended] ${callState.outcome}`);
-    }
+    broadcastToBrowsers({ event: 'status-update', state: callState });
+    console.log(`[Call ended] [${id}] ${callState.outcome}. Active calls remaining: ${activeAgents.size}`);
   }
 });
 
-// Start the server
+// ─────────────────────────────────────────────────────────────────────────────
+// Start server
+// ─────────────────────────────────────────────────────────────────────────────
+
 server.listen(PORT, () => {
   console.log(`==================================================`);
-  console.log(` Voice Agent Backend running locally on port ${PORT}`);
+  console.log(` Voice Agent Backend running on port ${PORT}`);
   console.log(` Webhook URL: http://localhost:${PORT}/webhook`);
   console.log(` Dashboard URL: http://localhost:${PORT}/index.html`);
+  console.log(` Health Check: http://localhost:${PORT}/health`);
+  console.log(` Active Calls: http://localhost:${PORT}/api/calls`);
   console.log(`==================================================`);
 });
