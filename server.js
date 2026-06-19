@@ -222,6 +222,11 @@ wssStream.on('connection', (ws, req) => {
     onInterruption: () => {
       broadcastToBrowsers({ event: 'interruption', agentId });
     },
+    onAiTiming: ({ llmMs, ttsMs, totalMs }) => {
+      // Broadcast exact response latency breakdown to dashboard
+      broadcastToBrowsers({ event: 'ai-timing', llmMs, ttsMs, totalMs, agentId });
+      console.log(`[Timing Broadcast] ⚡ Total: ${totalMs}ms | LLM: ${llmMs}ms | TTS: ${ttsMs}ms`);
+    },
     onError: (errMsg) => {
       console.error(`[Agent Error] [${agentId}]`, errMsg);
       broadcastToBrowsers({ event: 'error', message: errMsg, agentId });

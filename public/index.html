@@ -464,6 +464,9 @@
       border: 1px solid rgba(249, 115, 22, 0.15);
       border-bottom-right-radius: 0.15rem;
       color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
     }
 
     .interim-text {
@@ -504,6 +507,93 @@
 
     .toast.show {
       transform: translateY(0);
+    }
+
+    /* ── AI Response Timing Badge ───────────────────────────────────────────── */
+    .timing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      margin-top: 0.5rem;
+      cursor: default;
+      letter-spacing: 0.02em;
+      transition: opacity 0.2s ease;
+      position: relative;
+    }
+
+    /* Green: < 800ms */
+    .timing-badge.fast {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #10b981;
+    }
+
+    /* Yellow: 800ms – 1500ms */
+    .timing-badge.medium {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #f59e0b;
+    }
+
+    /* Red: > 1500ms */
+    .timing-badge.slow {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #ef4444;
+    }
+
+    /* Tooltip that appears on hover */
+    .timing-badge .timing-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      right: 0;
+      background: rgba(15, 20, 40, 0.97);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 0.6rem;
+      padding: 0.55rem 0.85rem;
+      white-space: nowrap;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      color: #e2e8f0;
+      z-index: 50;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      pointer-events: none;
+    }
+
+    .timing-badge:hover .timing-tooltip {
+      display: block;
+    }
+
+    .timing-tooltip .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+
+    .timing-tooltip .tooltip-row .label {
+      color: #64748b;
+    }
+
+    .timing-tooltip .tooltip-row .val {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+
+    .speech-ai {
+      align-self: flex-end;
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.12), rgba(249, 115, 22, 0.04));
+      border: 1px solid rgba(249, 115, 22, 0.15);
+      border-bottom-right-radius: 0.15rem;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
     }
 
     /* Animations */
@@ -647,9 +737,12 @@
   let activeDurationTimer = null;
   let isAiSpeaking = false;
 
-  // Active utterance trackers to compile scrolling bubble outputs
+  // Active utterance trackers
   let currentUserBubble = null;
   let currentAiBubble = null;
+
+  // ── Timing: stores the last ai-timing event, applied to the next finalized AI bubble
+  let lastAiTiming = null;
 
   // Page initialization
   window.addEventListener('DOMContentLoaded', () => {
@@ -792,6 +885,11 @@
             toggleAiSpeakingState(msg.isSpeaking);
             break;
 
+          case 'ai-timing':
+            // Store timing; it will be attached to the next finalized AI bubble
+            lastAiTiming = { llmMs: msg.llmMs, ttsMs: msg.ttsMs, totalMs: msg.totalMs };
+            break;
+
           case 'interruption':
             handleInterruptionNotice();
             break;
@@ -897,7 +995,8 @@
   }
 
   /**
-   * Append AI voice text character-by-character
+   * Append AI voice text character-by-character.
+   * When bubble finalizes (isFinal=true), attach the timing badge from lastAiTiming.
    */
   function handleAiTranscript(text, isFinal) {
     const body = document.getElementById('aiTranscriptBody');
@@ -908,16 +1007,56 @@
       }
       currentAiBubble = document.createElement('div');
       currentAiBubble.className = 'speech-turn speech-ai';
+
+      // Inner span for the text content
+      const textSpan = document.createElement('span');
+      textSpan.className = 'ai-bubble-text';
+      currentAiBubble.appendChild(textSpan);
+
       body.appendChild(currentAiBubble);
     }
 
+    // Always write text to the inner span
+    const textSpan = currentAiBubble.querySelector('.ai-bubble-text');
+
     if (isFinal) {
-      if (text) {
-        currentAiBubble.textContent += text;
+      if (text && textSpan) textSpan.textContent += text;
+
+      // Attach timing badge if we have timing data
+      if (lastAiTiming) {
+        const { llmMs, ttsMs, totalMs } = lastAiTiming;
+        lastAiTiming = null; // consume it
+
+        const speedClass = totalMs < 800 ? 'fast' : totalMs < 1500 ? 'medium' : 'slow';
+        const displayTime = totalMs < 1000
+          ? `${totalMs}ms`
+          : `${(totalMs / 1000).toFixed(1)}s`;
+
+        const badge = document.createElement('div');
+        badge.className = `timing-badge ${speedClass}`;
+        badge.innerHTML = `
+          <span>⚡ ${displayTime}</span>
+          <div class="timing-tooltip">
+            <div class="tooltip-row">
+              <span class="label">🧠 LLM first token</span>
+              <span class="val">${llmMs}ms</span>
+            </div>
+            <div class="tooltip-row">
+              <span class="label">🔊 TTS first audio</span>
+              <span class="val">${ttsMs}ms</span>
+            </div>
+            <div class="tooltip-row" style="margin-top:0.35rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:0.35rem;">
+              <span class="label">⚡ Total latency</span>
+              <span class="val" style="color: ${speedClass === 'fast' ? '#10b981' : speedClass === 'medium' ? '#f59e0b' : '#ef4444'}">${displayTime}</span>
+            </div>
+          </div>
+        `;
+        currentAiBubble.appendChild(badge);
       }
+
       currentAiBubble = null; // finalize bubble
     } else {
-      currentAiBubble.textContent += text;
+      if (textSpan) textSpan.textContent += text;
     }
 
     // Scroll to bottom

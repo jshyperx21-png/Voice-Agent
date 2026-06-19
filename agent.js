@@ -27,6 +27,7 @@ export class VoiceAgent {
       onStateChange: () => {},
       onUserTranscript: () => {},
       onAiTranscript: () => {},
+      onAiTiming: () => {},
       onInterruption: () => {},
       onError: () => {}
     };
@@ -100,6 +101,16 @@ export class VoiceAgent {
     this.sarvamTtsWsConfigSent = false;    // Config frame sent on this connection?
     this.sarvamTtsCurrentResolve = null;   // Resolve fn for in-flight chunk
     this.sarvamTtsCurrentBytesSent = 0;    // Bytes received for current chunk
+
+    // ── Response Timing Tracking ──────────────────────────────────────────────
+    // Tracks exact latency for each conversational turn:
+    //   turnStartedAt     → when user utterance is received by handleUserUtterance
+    //   llmFirstTokenAt   → when the very first LLM token arrives from OpenAI
+    //   firstAudioSentAt  → when the first audio chunk is sent to Plivo
+    this.turnStartedAt = 0;
+    this.llmFirstTokenAt = 0;
+    this.firstAudioSentAt = 0;
+    this.turnFirstAudioRecorded = false; // gate to fire onAiTiming only once per turn
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -370,6 +381,21 @@ export class VoiceAgent {
             if (audioChunk.length > 0 && this.isSpeaking && !this.isClosed) {
               this.sarvamTtsCurrentBytesSent += audioChunk.length;
               this.sendAudioToPlivo(audioChunk);
+
+              // ── Timing: record first audio sent this turn ──────────────────
+              if (!this.turnFirstAudioRecorded && this.turnStartedAt > 0) {
+                this.turnFirstAudioRecorded = true;
+                this.firstAudioSentAt = Date.now();
+                const totalMs = this.firstAudioSentAt - this.turnStartedAt;
+                const llmMs = this.llmFirstTokenAt
+                  ? this.llmFirstTokenAt - this.turnStartedAt
+                  : 0;
+                const ttsMs = this.llmFirstTokenAt
+                  ? this.firstAudioSentAt - this.llmFirstTokenAt
+                  : totalMs;
+                console.log(`[Timing] ⚡ Total: ${totalMs}ms | LLM first token: ${llmMs}ms | TTS first audio: ${ttsMs}ms`);
+                this.statusCallbacks.onAiTiming({ llmMs, ttsMs, totalMs });
+              }
             }
           }
 
@@ -693,6 +719,12 @@ export class VoiceAgent {
     this.ttsQueue = [];
     this.isTtsProcessing = false;
 
+    // Timing: reset all per-turn timing checkpoints
+    this.turnStartedAt = Date.now();
+    this.llmFirstTokenAt = 0;
+    this.firstAudioSentAt = 0;
+    this.turnFirstAudioRecorded = false;
+
     // Phase 2: Use cached config — zero disk I/O
     const systemPrompt = this.cachedSystemPrompt;
     const knowledgeBase = this.cachedKnowledgeBase;
@@ -784,6 +816,10 @@ VOICE COST AND FLOW RULES:
               const data = JSON.parse(cleanedLine.substring(6));
               const token = this.extractOpenAIStreamToken(data);
               if (token) {
+                // Timing: capture timestamp of very first LLM token this turn
+                if (!this.llmFirstTokenAt) {
+                  this.llmFirstTokenAt = Date.now();
+                }
                 completeAiResponseText += token;
                 ttsBuffer += token;
                 this.statusCallbacks.onAiTranscript(token, false);
