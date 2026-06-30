@@ -82,7 +82,7 @@ export class VoiceAgent {
     this.sarvamTtsMaxChunkLength = Number(process.env.SARVAM_TTS_MAX_CHUNK_LENGTH || 200);
     this.sarvamTtsAudioCodec = process.env.SARVAM_TTS_AUDIO_CODEC || 'mulaw';
     this.sarvamTtsSampleRate = Number(process.env.SARVAM_TTS_SAMPLE_RATE || 8000);
-    this.sarvamTtsFrameMs = Number(process.env.SARVAM_TTS_FRAME_MS || 120);
+    this.sarvamTtsFrameMs = Number(process.env.SARVAM_TTS_FRAME_MS || 40);
 
     // ── Phase 2: Config cache — no disk I/O per utterance ────────────────────
     this.cachedSystemPrompt = '';
@@ -94,15 +94,20 @@ export class VoiceAgent {
     // ── Phase 3: LLM → TTS streaming queue ───────────────────────────────────
     this.ttsQueue = [];              // Pending text chunks to synthesize
     this.isTtsProcessing = false;    // Is drainTtsQueue currently running?
+    this.ttsGeneration = 0;          // Invalidates work from interrupted turns
     this.llmStreamFinished = false;  // Has the LLM stream fully completed?
     this.ttsStreamStartedAt = 0;     // Timestamp when first TTS chunk was queued
     this.ttsStreamTotalBytesSent = 0; // Accumulated audio bytes across all chunks
 
     // ── Phase 4: Persistent TTS WebSocket ────────────────────────────────────
     this.sarvamTtsWs = null;               // Persistent TTS WebSocket reference
+    this.sarvamTtsConnectPromise = null;   // Prevent duplicate concurrent connections
     this.sarvamTtsWsConfigSent = false;    // Config frame sent on this connection?
     this.sarvamTtsCurrentResolve = null;   // Resolve fn for in-flight chunk
+    this.sarvamTtsCurrentWs = null;        // WS that owns the in-flight chunk
     this.sarvamTtsCurrentBytesSent = 0;    // Bytes received for current chunk
+    this.sarvamTtsCurrentHasAudio = false;
+    this.sarvamTtsCurrentFramesSent = 0;
     this.sarvamTtsAudioBuffer = Buffer.alloc(0);
 
     // ── Response Timing Tracking ──────────────────────────────────────────────
@@ -137,14 +142,12 @@ export class VoiceAgent {
     console.log('[Agent] Initializing AI streams...');
     this.connectSarvamStt();
 
-    // Pre-warm TTS: open the persistent WS and send an empty flush.
-    // This ensures the connection + config handshake completes before the
-    // first real utterance arrives, saving 300–500ms on the very first turn.
+    // Pre-warm only the connection. An empty flush can emit a delayed `final`
+    // event and incorrectly complete the real greeting synthesis.
     try {
       await this.ensureSarvamTtsConnected();
       if (this.sarvamTtsWs && this.sarvamTtsWs.readyState === WebSocket.OPEN) {
-        this.sarvamTtsWs.send(JSON.stringify({ type: 'flush' }));
-        console.log('[TTS Pre-warm] Warm-up flush sent. TTS pipeline ready.');
+        console.log('[TTS Pre-warm] Connection configured. TTS pipeline ready.');
       }
     } catch (err) {
       console.warn('[TTS Pre-warm] Failed (non-fatal):', err.message);
@@ -359,6 +362,10 @@ export class VoiceAgent {
       return;
     }
 
+    if (this.sarvamTtsConnectPromise) {
+      return this.sarvamTtsConnectPromise;
+    }
+
     // Clean up any stale connection
     if (this.sarvamTtsWs) {
       try { this.sarvamTtsWs.terminate(); } catch (_) {}
@@ -368,7 +375,7 @@ export class VoiceAgent {
 
     console.log(`[Sarvam TTS] Opening persistent connection. Model: ${this.sarvamTtsModel}, Speaker: ${this.sarvamTtsSpeaker}`);
 
-    return new Promise((resolve, reject) => {
+    const connectPromise = new Promise((resolve, reject) => {
       const params = new URLSearchParams({
         model: this.sarvamTtsModel,
         send_completion_event: 'true'
@@ -412,9 +419,11 @@ export class VoiceAgent {
 
           if (message.type === 'error' || message.error || message.data?.error) {
             console.error('[Sarvam TTS] API error:', message);
-            if (this.sarvamTtsCurrentResolve) {
+            if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
               const res = this.sarvamTtsCurrentResolve;
               this.sarvamTtsCurrentResolve = null;
+              this.sarvamTtsCurrentWs = null;
+              this.sarvamTtsCurrentHasAudio = false;
               res(0);
             }
             return;
@@ -422,8 +431,18 @@ export class VoiceAgent {
 
           const audioBase64 = message.data?.audio || message.audio || message.data?.audio_chunk;
           if (audioBase64) {
+            if (this.sarvamTtsCurrentWs !== ws) {
+              console.warn('[Sarvam TTS] Ignoring audio from a stale WebSocket.');
+              return;
+            }
+            const contentType = message.data?.content_type || message.content_type || '';
+            if (contentType && !contentType.toLowerCase().includes('mulaw')) {
+              console.error(`[Sarvam TTS] Unexpected audio content type: ${contentType}`);
+              return;
+            }
             const audioChunk = Buffer.from(audioBase64, 'base64');
             if (audioChunk.length > 0 && this.isSpeaking && !this.isClosed) {
+              this.sarvamTtsCurrentHasAudio = true;
               this.sarvamTtsAudioBuffer = Buffer.concat([this.sarvamTtsAudioBuffer, audioChunk]);
               this.flushSarvamTtsAudioFrames(false);
 
@@ -449,13 +468,21 @@ export class VoiceAgent {
             eventType === 'final' || eventType === 'completed' ||
             eventType === 'done' || message.done === true
           ) {
-            this.flushSarvamTtsAudioFrames(true);
-            if (this.sarvamTtsCurrentResolve) {
+            if (
+              this.sarvamTtsCurrentResolve &&
+              this.sarvamTtsCurrentWs === ws &&
+              this.sarvamTtsCurrentHasAudio
+            ) {
+              this.flushSarvamTtsAudioFrames(true);
               const res = this.sarvamTtsCurrentResolve;
               const bytesSent = this.sarvamTtsCurrentBytesSent;
               this.sarvamTtsCurrentResolve = null;
+              this.sarvamTtsCurrentWs = null;
               this.sarvamTtsCurrentBytesSent = 0;
+              this.sarvamTtsCurrentHasAudio = false;
               res(bytesSent);
+            } else if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
+              console.warn('[Sarvam TTS] Ignoring final event received before audio.');
             }
           }
         } catch (err) {
@@ -465,12 +492,16 @@ export class VoiceAgent {
 
       ws.on('error', (err) => {
         console.error('[Sarvam TTS] Persistent WS error:', err);
-        this.sarvamTtsWs = null;
-        this.sarvamTtsWsConfigSent = false;
+        if (this.sarvamTtsWs === ws) {
+          this.sarvamTtsWs = null;
+          this.sarvamTtsWsConfigSent = false;
+        }
         // Unblock any in-flight chunk
-        if (this.sarvamTtsCurrentResolve) {
+        if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
           const res = this.sarvamTtsCurrentResolve;
           this.sarvamTtsCurrentResolve = null;
+          this.sarvamTtsCurrentWs = null;
+          this.sarvamTtsCurrentHasAudio = false;
           res(0);
         }
         clearTimeout(openTimeout);
@@ -479,18 +510,31 @@ export class VoiceAgent {
 
       ws.on('close', () => {
         console.log('[Sarvam TTS] Persistent WS closed.');
-        this.sarvamTtsWs = null;
-        this.sarvamTtsWsConfigSent = false;
+        if (this.sarvamTtsWs === ws) {
+          this.sarvamTtsWs = null;
+          this.sarvamTtsWsConfigSent = false;
+        }
         // Unblock any in-flight chunk
-        if (this.sarvamTtsCurrentResolve) {
+        if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
           const res = this.sarvamTtsCurrentResolve;
           this.sarvamTtsCurrentResolve = null;
+          this.sarvamTtsCurrentWs = null;
+          this.sarvamTtsCurrentHasAudio = false;
           res(0);
         }
       });
 
       this.sarvamTtsWs = ws;
     });
+
+    this.sarvamTtsConnectPromise = connectPromise;
+    try {
+      await connectPromise;
+    } finally {
+      if (this.sarvamTtsConnectPromise === connectPromise) {
+        this.sarvamTtsConnectPromise = null;
+      }
+    }
   }
 
   flushSarvamTtsAudioFrames(force = false) {
@@ -508,8 +552,13 @@ export class VoiceAgent {
         : frameBytes;
       const frame = this.sarvamTtsAudioBuffer.subarray(0, bytesToSend);
       this.sarvamTtsAudioBuffer = this.sarvamTtsAudioBuffer.subarray(bytesToSend);
-      this.sarvamTtsCurrentBytesSent += frame.length;
-      this.sendAudioToPlivo(frame);
+      if (this.sendAudioToPlivo(frame)) {
+        this.sarvamTtsCurrentBytesSent += frame.length;
+        this.sarvamTtsCurrentFramesSent++;
+        if (this.sarvamTtsCurrentFramesSent === 1) {
+          console.log(`[Plivo Audio] First μ-law frame sent: ${frame.length} bytes, stream=${this.streamId || 'unknown'}`);
+        }
+      }
     }
   }
 
@@ -539,7 +588,11 @@ export class VoiceAgent {
 
     // Reset per-chunk tracking
     this.sarvamTtsCurrentBytesSent = 0;
+    this.sarvamTtsCurrentHasAudio = false;
+    this.sarvamTtsCurrentFramesSent = 0;
     this.sarvamTtsAudioBuffer = Buffer.alloc(0);
+
+    const requestWs = this.sarvamTtsWs;
 
     return new Promise((resolve) => {
       let settled = false;
@@ -548,8 +601,9 @@ export class VoiceAgent {
         if (settled) return;
         settled = true;
         console.error('[Sarvam TTS] Chunk synthesis timed out, continuing.');
-        if (this.sarvamTtsCurrentResolve) {
+        if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === requestWs) {
           this.sarvamTtsCurrentResolve = null;
+          this.sarvamTtsCurrentWs = null;
         }
         resolve(0);
       }, 15000);
@@ -560,10 +614,11 @@ export class VoiceAgent {
         clearTimeout(chunkTimeout);
         resolve(bytesSent);
       };
+      this.sarvamTtsCurrentWs = requestWs;
 
       // Send text + flush to trigger synthesis of this chunk
-      this.sarvamTtsWs.send(JSON.stringify({ type: 'text', data: { text: normalizedText } }));
-      this.sarvamTtsWs.send(JSON.stringify({ type: 'flush' }));
+      requestWs.send(JSON.stringify({ type: 'text', data: { text: normalizedText } }));
+      requestWs.send(JSON.stringify({ type: 'flush' }));
     });
   }
 
@@ -576,6 +631,7 @@ export class VoiceAgent {
     const cleanText = this.normalizeTextForTts(text);
     if (!cleanText || this.isClosed || !this.isSpeaking) return false;
 
+    const speechGeneration = this.ttsGeneration;
     const startedAt = Date.now();
     const bytesSent = await this.synthesizeChunkWithSarvam(cleanText);
 
@@ -584,6 +640,7 @@ export class VoiceAgent {
       const playbackMs = Math.ceil((bytesSent / this.sarvamTtsSampleRate) * 1000);
       const remainingMs = Math.max(0, playbackMs - elapsedMs) + 250;
       setTimeout(() => {
+        if (speechGeneration !== this.ttsGeneration || this.isClosed) return;
         const secondsSent = (bytesSent / this.sarvamTtsSampleRate).toFixed(2);
         this.markAgentIdle(`[Sarvam TTS] Audio complete (${secondsSent}s). Agent idle.`);
       }, remainingMs);
@@ -633,7 +690,7 @@ export class VoiceAgent {
    */
   enqueueTtsChunk(text) {
     if (!text || !text.trim() || this.isClosed || !this.isSpeaking) return;
-    this.ttsQueue.push(text.trim());
+    this.ttsQueue.push({ text: text.trim(), generation: this.ttsGeneration });
     if (!this.isTtsProcessing) {
       this.drainTtsQueue();
     }
@@ -649,9 +706,12 @@ export class VoiceAgent {
     this.isTtsProcessing = true;
 
     while (this.ttsQueue.length > 0 && this.isSpeaking && !this.isClosed) {
-      const chunk = this.ttsQueue.shift();
-      const bytesSent = await this.synthesizeChunkWithSarvam(chunk);
-      if (bytesSent > 0) this.ttsStreamTotalBytesSent += bytesSent;
+      const item = this.ttsQueue.shift();
+      if (!item || item.generation !== this.ttsGeneration) continue;
+      const bytesSent = await this.synthesizeChunkWithSarvam(item.text);
+      if (item.generation === this.ttsGeneration && bytesSent > 0) {
+        this.ttsStreamTotalBytesSent += bytesSent;
+      }
     }
 
     this.isTtsProcessing = false;
@@ -660,10 +720,12 @@ export class VoiceAgent {
     // 1. LLM has fully finished streaming
     // 2. TTS queue is fully drained
     if (this.llmStreamFinished && this.ttsQueue.length === 0 && this.isSpeaking && !this.isClosed) {
+      const completedGeneration = this.ttsGeneration;
       const elapsedMs = Date.now() - this.ttsStreamStartedAt;
       const playbackMs = Math.ceil((this.ttsStreamTotalBytesSent / this.sarvamTtsSampleRate) * 1000);
       const remainingMs = Math.max(0, playbackMs - elapsedMs) + 250;
       setTimeout(() => {
+        if (completedGeneration !== this.ttsGeneration || this.isClosed) return;
         this.markAgentIdle('[Agent] All streaming TTS chunks complete. Agent idle.');
       }, remainingMs);
     }
@@ -780,6 +842,7 @@ export class VoiceAgent {
   async handleUserUtterance(transcript) {
     if (this.isClosed) return;
     console.log(`[Agent] Processing utterance: "${transcript}"`);
+    const turnGeneration = ++this.ttsGeneration;
 
     this.isSpeaking = true;
     this.outboundAudioBuffer = Buffer.alloc(0);
@@ -794,7 +857,6 @@ export class VoiceAgent {
     this.ttsStreamStartedAt = Date.now();
     this.ttsStreamTotalBytesSent = 0;
     this.ttsQueue = [];
-    this.isTtsProcessing = false;
 
     // Timing: reset all per-turn timing checkpoints
     this.turnStartedAt = Date.now();
@@ -851,7 +913,8 @@ VOICE COST AND FLOW RULES:
       return;
     }
 
-    this.currentLlmController = new AbortController();
+    const llmController = new AbortController();
+    this.currentLlmController = llmController;
     let completeAiResponseText = '';
     let ttsBuffer = ''; // Phase 3: accumulate tokens until sentence boundary
 
@@ -877,7 +940,7 @@ VOICE COST AND FLOW RULES:
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: this.currentLlmController.signal
+        signal: llmController.signal
       });
 
       if (!response.ok) {
@@ -957,7 +1020,11 @@ VOICE COST AND FLOW RULES:
         if (this.isSpeaking) await this.synthesizeSpeech(fallbackText);
       }
     } finally {
-      this.currentLlmController = null;
+      if (this.currentLlmController === llmController) {
+        this.currentLlmController = null;
+      }
+
+      if (turnGeneration !== this.ttsGeneration) return;
 
       // ── Phase 3: Always mark LLM done, then kick the drain loop ───────────
       this.llmStreamFinished = true;
@@ -1020,12 +1087,20 @@ VOICE COST AND FLOW RULES:
         event: 'playAudio',
         media: {
           contentType: 'audio/x-mulaw',
-          sampleRate: '8000',
+          sampleRate: 8000,
           payload: base64Payload
         }
       };
-      this.plivoWs.send(JSON.stringify(msg));
+      try {
+        this.plivoWs.send(JSON.stringify(msg));
+        return true;
+      } catch (err) {
+        console.error('[Plivo Audio] Failed to send audio frame:', err.message);
+        return false;
+      }
     }
+    console.warn('[Plivo Audio] Dropped audio frame because the stream is not open.');
+    return false;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1038,6 +1113,7 @@ VOICE COST AND FLOW RULES:
   handleInterruption() {
     console.log('[Interruption] Barge-in! Stopping speech and clearing buffers.');
     this.clearSilenceTimer();
+    this.ttsGeneration++;
 
     // Mark as not speaking to stop all isSpeaking guards in drainTtsQueue / synthesize
     this.isSpeaking = false;
