@@ -270,9 +270,28 @@ export class VoiceAgent {
         const response = JSON.parse(rawStr);
 
         if (response.type === 'error' || response.error) {
+          const errMsg = response.data?.message || response.error || response.message || 'Sarvam STT error.';
           console.error('[Sarvam STT] API error:', response);
-          this.statusCallbacks.onError(response.error || response.message || 'Sarvam STT error.');
-          this.sarvamSttFatalError = true;
+
+          // ── Classify: only truly fatal errors (auth, bad key) block reconnection ──
+          // 'audio must not be None' = transient startup race; Plivo sent an empty
+          // frame before real audio arrived. Safe to reconnect.
+          const isTransient =
+            errMsg.includes('audio') ||
+            errMsg.includes('None') ||
+            errMsg.includes('Pipeline') ||
+            errMsg.includes('Invalid request');
+
+          if (isTransient) {
+            console.warn('[Sarvam STT] Transient error — will reconnect:', errMsg);
+            // Force close so the 'close' handler triggers a clean reconnect
+            try { this.sarvamSttWs.terminate(); } catch (_) {}
+          } else {
+            // Truly fatal: wrong API key, quota exhausted, unsupported language, etc.
+            console.error('[Sarvam STT] Fatal error — NOT reconnecting:', errMsg);
+            this.statusCallbacks.onError(errMsg);
+            this.sarvamSttFatalError = true;
+          }
           return;
         }
 
@@ -1285,11 +1304,21 @@ VOICE COST AND FLOW RULES:
    */
   handleInboundAudio(base64Payload) {
     if (this.isClosed) return;
+
+    // ── Fix: guard against empty payloads from Plivo at call start ───────────────
+    // Plivo occasionally sends empty or near-empty media frames during the
+    // initial stream setup. Forwarding these to Sarvam STT causes the error:
+    //   "Error in Pipeline: Invalid request: 'audio' must not be None."
+    // which was previously treated as fatal, killing STT for the entire call.
+    if (!base64Payload || base64Payload.length < 4) return;
+    const mulawAudio = Buffer.from(base64Payload, 'base64');
+    if (mulawAudio.length === 0) return;
+
     if (this.sarvamSttWs && this.sarvamSttWs.readyState === WebSocket.OPEN) {
-      const mulawAudio = Buffer.from(base64Payload, 'base64');
       // Sarvam STT requires JSON text frames with base64-encoded PCM16 audio.
       // Binary frames are explicitly NOT supported by this endpoint.
       const pcmAudio = this.mulawBufferToPcm16Buffer(mulawAudio);
+      if (pcmAudio.length === 0) return; // extra safety
       this.sarvamSttWs.send(JSON.stringify({
         audio_chunk: pcmAudio.toString('base64')
       }));
