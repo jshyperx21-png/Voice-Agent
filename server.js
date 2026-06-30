@@ -18,6 +18,10 @@ app.use(express.static('public'));
 // Previously: let activeAgent = null (single-call only).
 const activeAgents = new Map();
 
+// Completed call recordings — keyed by agentId → Buffer (μ-law)
+// Kept in memory for 30 minutes after call ends, then auto-purged.
+const completedRecordings = new Map();
+
 // Dashboard UI clients
 const browserClients = new Set();
 
@@ -145,10 +149,62 @@ app.get('/api/calls', (req, res) => {
       agentId,
       streamId: agent.streamId,
       durationSeconds: startTime ? Math.round((Date.now() - startTime) / 1000) : 0,
-      isSpeaking: agent.isSpeaking
+      isSpeaking: agent.isSpeaking,
+      isRecording: agent.isRecording
     });
   }
   res.json({ activeCalls: calls.length, calls });
+});
+
+/**
+ * POST /api/recording/:agentId/start — Begin capturing outbound audio for this call.
+ */
+app.post('/api/recording/:agentId/start', (req, res) => {
+  const agent = activeAgents.get(req.params.agentId);
+  if (!agent) return res.status(404).json({ error: 'Call not found.' });
+  agent.startRecording();
+  broadcastToBrowsers({ event: 'recording-state', agentId: req.params.agentId, isRecording: true });
+  res.json({ success: true, message: 'Recording started.' });
+});
+
+/**
+ * POST /api/recording/:agentId/stop — Stop recording, hold the buffer in memory.
+ */
+app.post('/api/recording/:agentId/stop', (req, res) => {
+  const agent = activeAgents.get(req.params.agentId);
+  if (!agent) return res.status(404).json({ error: 'Call not found.' });
+  const mulawBuffer = agent.stopRecording();
+  if (!mulawBuffer) return res.status(400).json({ error: 'No audio captured.' });
+  completedRecordings.set(req.params.agentId, mulawBuffer);
+  // Auto-purge after 30 minutes
+  setTimeout(() => completedRecordings.delete(req.params.agentId), 30 * 60 * 1000);
+  broadcastToBrowsers({ event: 'recording-state', agentId: req.params.agentId, isRecording: false, hasRecording: true });
+  res.json({ success: true, bytes: mulawBuffer.length, durationSeconds: (mulawBuffer.length / 8000).toFixed(1) });
+});
+
+/**
+ * GET /api/recording/:agentId/download — Serve the recording as a WAV file.
+ * The browser will decode and re-encode to MP3 using the Web Audio API.
+ */
+app.get('/api/recording/:agentId/download', (req, res) => {
+  // Check active calls first (in case they download mid-call)
+  let mulawBuffer = null;
+  const activeAgent = activeAgents.get(req.params.agentId);
+  if (activeAgent && activeAgent.recordingChunks.length > 0) {
+    mulawBuffer = Buffer.concat(activeAgent.recordingChunks);
+  } else {
+    mulawBuffer = completedRecordings.get(req.params.agentId);
+  }
+  if (!mulawBuffer || mulawBuffer.length === 0) {
+    return res.status(404).json({ error: 'No recording found for this call.' });
+  }
+  const wavBuffer = VoiceAgent.buildWavFromMulaw(mulawBuffer);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  res.setHeader('Content-Type', 'audio/wav');
+  res.setHeader('Content-Disposition', `attachment; filename="call-recording-${timestamp}.wav"`);
+  res.setHeader('Content-Length', wavBuffer.length);
+  res.send(wavBuffer);
+  console.log(`[Recording] Served WAV download for agent ${req.params.agentId}: ${wavBuffer.length} bytes`);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -301,6 +357,16 @@ wssStream.on('connection', (ws, req) => {
 
     const agentToClose = activeAgents.get(id);
     if (agentToClose) {
+      // ── Recording: persist any captured audio before closing ──────────────
+      if (agentToClose.isRecording || agentToClose.recordingChunks.length > 0) {
+        const mulawBuf = agentToClose.stopRecording();
+        if (mulawBuf && mulawBuf.length > 0) {
+          completedRecordings.set(id, mulawBuf);
+          setTimeout(() => completedRecordings.delete(id), 30 * 60 * 1000);
+          broadcastToBrowsers({ event: 'recording-state', agentId: id, isRecording: false, hasRecording: true });
+          console.log(`[Recording] Auto-saved on teardown: ${mulawBuf.length} bytes for agent ${id}`);
+        }
+      }
       agentToClose.close();
       activeAgents.delete(id);
     }

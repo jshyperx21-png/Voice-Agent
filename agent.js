@@ -109,7 +109,14 @@ export class VoiceAgent {
     this.sarvamTtsCurrentBytesSent = 0;    // Bytes received for current chunk
     this.sarvamTtsCurrentHasAudio = false;
     this.sarvamTtsCurrentFramesSent = 0;
+    this.sarvamTtsFinalPending = false;    // Fix #3: final event arrived before audio
     this.sarvamTtsAudioBuffer = Buffer.alloc(0);
+
+    // ── Call Recording ────────────────────────────────────────────────────────
+    // Accumulates every μ-law audio frame sent to Plivo during this call.
+    // Retrieved by server.js to build a WAV download on demand.
+    this.recordingChunks = [];   // Array of Buffer (μ-law 8 kHz frames)
+    this.isRecording = false;
 
     // ── Response Timing Tracking ──────────────────────────────────────────────
     // Tracks exact latency for each conversational turn:
@@ -418,6 +425,9 @@ export class VoiceAgent {
         try {
           const message = JSON.parse(data.toString());
 
+          // ── Fix #2: Full debug log every TTS frame (first 200 chars) ──────
+          console.log('[TTS DEBUG] Raw msg:', JSON.stringify(message).substring(0, 250));
+
           if (message.type === 'error' || message.error || message.data?.error) {
             console.error('[Sarvam TTS] API error:', message);
             if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
@@ -425,6 +435,7 @@ export class VoiceAgent {
               this.sarvamTtsCurrentResolve = null;
               this.sarvamTtsCurrentWs = null;
               this.sarvamTtsCurrentHasAudio = false;
+              this.sarvamTtsFinalPending = false;
               res(0);
             }
             return;
@@ -436,12 +447,23 @@ export class VoiceAgent {
               console.warn('[Sarvam TTS] Ignoring audio from a stale WebSocket.');
               return;
             }
+
+            // ── Fix #1: Log content_type but NEVER silently drop audio ──────
+            // Previously this block returned early if content_type didn't include
+            // 'mulaw', causing 100% audio loss if Sarvam returns a different label.
             const contentType = message.data?.content_type || message.content_type || '';
-            if (contentType && !contentType.toLowerCase().includes('mulaw')) {
-              console.error(`[Sarvam TTS] Unexpected audio content type: ${contentType}`);
-              return;
+            if (contentType) {
+              console.log(`[TTS DEBUG] content_type="${contentType}" audioBase64 length=${audioBase64.length}`);
+              if (!contentType.toLowerCase().includes('mulaw') &&
+                  !contentType.toLowerCase().includes('audio')) {
+                // Only reject truly unknown formats, not minor label variations
+                console.warn(`[Sarvam TTS] Unexpected content_type: ${contentType} — proceeding anyway`);
+              }
             }
+
             const audioChunk = Buffer.from(audioBase64, 'base64');
+            console.log(`[TTS DEBUG] Decoded audioChunk: ${audioChunk.length} bytes`);
+
             if (audioChunk.length > 0 && this.isSpeaking && !this.isClosed) {
               this.sarvamTtsCurrentHasAudio = true;
               this.sarvamTtsAudioBuffer = Buffer.concat([this.sarvamTtsAudioBuffer, audioChunk]);
@@ -461,6 +483,29 @@ export class VoiceAgent {
                 console.log(`[Timing] ⚡ Total: ${totalMs}ms | LLM first token: ${llmMs}ms | TTS first audio: ${ttsMs}ms`);
                 this.statusCallbacks.onAiTiming({ llmMs, ttsMs, totalMs });
               }
+
+              // ── Fix #3: If final arrived before this audio, resolve now ──
+              if (this.sarvamTtsFinalPending && this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
+                console.log('[TTS DEBUG] Resolving deferred final event after audio arrived.');
+                this.sarvamTtsFinalPending = false;
+                this.flushSarvamTtsAudioFrames(true);
+                const res = this.sarvamTtsCurrentResolve;
+                const bytesSent = this.sarvamTtsCurrentBytesSent;
+                const framesSent = this.sarvamTtsCurrentFramesSent;
+                this.sarvamTtsCurrentResolve = null;
+                this.sarvamTtsCurrentWs = null;
+                this.sarvamTtsCurrentBytesSent = 0;
+                this.sarvamTtsCurrentHasAudio = false;
+                this.statusCallbacks.onTtsAudio({
+                  status: 'completed',
+                  bytesSent,
+                  framesSent,
+                  codec: 'audio/x-mulaw',
+                  sampleRate: 8000,
+                  streamId: this.streamId
+                });
+                res(bytesSent);
+              }
             }
           }
 
@@ -474,6 +519,8 @@ export class VoiceAgent {
               this.sarvamTtsCurrentWs === ws &&
               this.sarvamTtsCurrentHasAudio
             ) {
+              // Normal case: audio already received, resolve immediately
+              this.sarvamTtsFinalPending = false;
               this.flushSarvamTtsAudioFrames(true);
               const res = this.sarvamTtsCurrentResolve;
               const bytesSent = this.sarvamTtsCurrentBytesSent;
@@ -492,7 +539,9 @@ export class VoiceAgent {
               });
               res(bytesSent);
             } else if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
-              console.warn('[Sarvam TTS] Ignoring final event received before audio.');
+              // ── Fix #3: final arrived before any audio — store flag, resolve when audio comes ──
+              console.warn('[TTS DEBUG] final event arrived before audio — deferring resolve.');
+              this.sarvamTtsFinalPending = true;
             }
           }
         } catch (err) {
@@ -604,9 +653,11 @@ export class VoiceAgent {
     }
 
     // Reset per-chunk tracking
+    // ── Fix #4: Reset audio buffer ONLY here (before new chunk), never mid-chunk ──
     this.sarvamTtsCurrentBytesSent = 0;
     this.sarvamTtsCurrentHasAudio = false;
     this.sarvamTtsCurrentFramesSent = 0;
+    this.sarvamTtsFinalPending = false;
     this.sarvamTtsAudioBuffer = Buffer.alloc(0);
 
     const requestWs = this.sarvamTtsWs;
@@ -1096,6 +1147,7 @@ VOICE COST AND FLOW RULES:
 
   /**
    * Send one G.711 μ-law audio chunk to Plivo for playback.
+   * Also captures the frame into the call recording buffer.
    */
   sendAudioToPlivo(binaryChunk) {
     if (this.plivoWs && this.plivoWs.readyState === WebSocket.OPEN) {
@@ -1110,6 +1162,10 @@ VOICE COST AND FLOW RULES:
       };
       try {
         this.plivoWs.send(JSON.stringify(msg));
+        // ── Recording: capture every outbound frame ──────────────────────
+        if (this.isRecording) {
+          this.recordingChunks.push(Buffer.from(binaryChunk));
+        }
         return true;
       } catch (err) {
         console.error('[Plivo Audio] Failed to send audio frame:', err.message);
@@ -1120,6 +1176,58 @@ VOICE COST AND FLOW RULES:
     console.warn('[Plivo Audio] Dropped audio frame because the stream is not open.');
     this.statusCallbacks.onTtsAudio({ status: 'error', message: 'Plivo stream is not open.', streamId: this.streamId });
     return false;
+  }
+
+  /**
+   * Start capturing all outbound audio frames into the recording buffer.
+   */
+  startRecording() {
+    this.recordingChunks = [];
+    this.isRecording = true;
+    console.log('[Recording] Started capturing outbound audio.');
+  }
+
+  /**
+   * Stop recording and return all captured μ-law audio as a single Buffer.
+   * Returns null if nothing was recorded.
+   */
+  stopRecording() {
+    this.isRecording = false;
+    if (this.recordingChunks.length === 0) return null;
+    const combined = Buffer.concat(this.recordingChunks);
+    console.log(`[Recording] Stopped. Captured ${combined.length} bytes (${(combined.length / 8000).toFixed(1)}s).`);
+    return combined;
+  }
+
+  /**
+   * Build a valid WAV file buffer from raw G.711 μ-law 8 kHz data.
+   * The browser's Web Audio API can decode WAV and re-encode to MP3.
+   */
+  static buildWavFromMulaw(mulawBuffer) {
+    const sampleRate = 8000;
+    const numChannels = 1;
+    const bitsPerSample = 8;       // μ-law is 8-bit
+    const audioFormat = 7;         // PCM=1, μ-law=7
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const dataSize = mulawBuffer.length;
+    const wavHeader = Buffer.alloc(44);
+
+    wavHeader.write('RIFF', 0);
+    wavHeader.writeUInt32LE(36 + dataSize, 4);
+    wavHeader.write('WAVE', 8);
+    wavHeader.write('fmt ', 12);
+    wavHeader.writeUInt32LE(16, 16);              // fmt chunk size
+    wavHeader.writeUInt16LE(audioFormat, 20);     // audio format (7 = μ-law)
+    wavHeader.writeUInt16LE(numChannels, 22);
+    wavHeader.writeUInt32LE(sampleRate, 24);
+    wavHeader.writeUInt32LE(byteRate, 28);
+    wavHeader.writeUInt16LE(blockAlign, 32);
+    wavHeader.writeUInt16LE(bitsPerSample, 34);
+    wavHeader.write('data', 36);
+    wavHeader.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([wavHeader, mulawBuffer]);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
