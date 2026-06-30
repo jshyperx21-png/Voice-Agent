@@ -414,6 +414,22 @@
       box-shadow: 0 0 8px var(--accent);
     }
 
+    .tts-audio-status {
+      margin-left: auto;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      background: rgba(148, 163, 184, 0.12);
+    }
+
+    .tts-audio-status.sending { color: #22d3ee; background: rgba(34, 211, 238, 0.12); }
+    .tts-audio-status.completed { color: #10b981; background: rgba(16, 185, 129, 0.12); }
+    .tts-audio-status.error { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+
     .transcript-body {
       padding: 1.25rem;
       flex-grow: 1;
@@ -710,7 +726,8 @@
         <div class="transcript-box">
           <div class="transcript-header ai-header">
             <div class="indicator" id="aiSpeakingIndicator"></div>
-            <span>AI Voice stream (Outbound)</span>
+            <span>AI Response (Outbound)</span>
+            <span class="tts-audio-status" id="ttsAudioStatus">Waiting for TTS audio</span>
           </div>
           <div class="transcript-body" id="aiTranscriptBody">
             <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
@@ -890,6 +907,10 @@
             lastAiTiming = { llmMs: msg.llmMs, ttsMs: msg.ttsMs, totalMs: msg.totalMs };
             break;
 
+          case 'tts-audio':
+            updateTtsAudioStatus(msg);
+            break;
+
           case 'interruption':
             handleInterruptionNotice();
             break;
@@ -912,6 +933,21 @@
       stopCallTimer();
       setTimeout(connectStatusWebSocket, 3000);
     };
+  }
+
+  function updateTtsAudioStatus(msg) {
+    const status = document.getElementById('ttsAudioStatus');
+    if (!status) return;
+
+    status.className = `tts-audio-status ${msg.status || ''}`;
+    if (msg.status === 'sending') {
+      status.textContent = `Sending to Plivo · ${msg.sampleRate || '?'} Hz`;
+    } else if (msg.status === 'completed') {
+      const seconds = msg.sampleRate ? (msg.bytesSent / msg.sampleRate).toFixed(1) : '?';
+      status.textContent = `Queued to Plivo ${seconds}s · ${msg.framesSent} frames`;
+    } else if (msg.status === 'error') {
+      status.textContent = `TTS send failed: ${msg.message || 'unknown error'}`;
+    }
   }
 
   /**

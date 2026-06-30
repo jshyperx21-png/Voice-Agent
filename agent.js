@@ -28,6 +28,7 @@ export class VoiceAgent {
       onUserTranscript: () => {},
       onAiTranscript: () => {},
       onAiTiming: () => {},
+      onTtsAudio: () => {},
       onInterruption: () => {},
       onError: () => {}
     };
@@ -476,10 +477,19 @@ export class VoiceAgent {
               this.flushSarvamTtsAudioFrames(true);
               const res = this.sarvamTtsCurrentResolve;
               const bytesSent = this.sarvamTtsCurrentBytesSent;
+              const framesSent = this.sarvamTtsCurrentFramesSent;
               this.sarvamTtsCurrentResolve = null;
               this.sarvamTtsCurrentWs = null;
               this.sarvamTtsCurrentBytesSent = 0;
               this.sarvamTtsCurrentHasAudio = false;
+              this.statusCallbacks.onTtsAudio({
+                status: 'completed',
+                bytesSent,
+                framesSent,
+                codec: 'audio/x-mulaw',
+                sampleRate: 8000,
+                streamId: this.streamId
+              });
               res(bytesSent);
             } else if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
               console.warn('[Sarvam TTS] Ignoring final event received before audio.');
@@ -557,6 +567,13 @@ export class VoiceAgent {
         this.sarvamTtsCurrentFramesSent++;
         if (this.sarvamTtsCurrentFramesSent === 1) {
           console.log(`[Plivo Audio] First μ-law frame sent: ${frame.length} bytes, stream=${this.streamId || 'unknown'}`);
+          this.statusCallbacks.onTtsAudio({
+            status: 'sending',
+            frameBytes: frame.length,
+            codec: 'audio/x-mulaw',
+            sampleRate: 8000,
+            streamId: this.streamId
+          });
         }
       }
     }
@@ -1096,10 +1113,12 @@ VOICE COST AND FLOW RULES:
         return true;
       } catch (err) {
         console.error('[Plivo Audio] Failed to send audio frame:', err.message);
+        this.statusCallbacks.onTtsAudio({ status: 'error', message: err.message, streamId: this.streamId });
         return false;
       }
     }
     console.warn('[Plivo Audio] Dropped audio frame because the stream is not open.');
+    this.statusCallbacks.onTtsAudio({ status: 'error', message: 'Plivo stream is not open.', streamId: this.streamId });
     return false;
   }
 

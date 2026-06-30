@@ -227,6 +227,9 @@ wssStream.on('connection', (ws, req) => {
       broadcastToBrowsers({ event: 'ai-timing', llmMs, ttsMs, totalMs, agentId });
       console.log(`[Timing Broadcast] ⚡ Total: ${totalMs}ms | LLM: ${llmMs}ms | TTS: ${ttsMs}ms`);
     },
+    onTtsAudio: (audioState) => {
+      broadcastToBrowsers({ event: 'tts-audio', ...audioState, agentId });
+    },
     onError: (errMsg) => {
       console.error(`[Agent Error] [${agentId}]`, errMsg);
       broadcastToBrowsers({ event: 'error', message: errMsg, agentId });
