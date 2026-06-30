@@ -1305,25 +1305,23 @@ VOICE COST AND FLOW RULES:
   handleInboundAudio(base64Payload) {
     if (this.isClosed) return;
 
-    // ── Fix: guard against empty payloads from Plivo at call start ───────────────
-    // Plivo occasionally sends empty or near-empty media frames during the
-    // initial stream setup. Forwarding these to Sarvam STT causes the error:
-    //   "Error in Pipeline: Invalid request: 'audio' must not be None."
-    // which was previously treated as fatal, killing STT for the entire call.
+    // ── Guard against empty payloads from Plivo at call start ────────────────
     if (!base64Payload || base64Payload.length < 4) return;
     const mulawAudio = Buffer.from(base64Payload, 'base64');
     if (mulawAudio.length === 0) return;
 
     if (this.sarvamSttWs && this.sarvamSttWs.readyState === WebSocket.OPEN) {
-      // Sarvam STT requires JSON text frames with base64-encoded PCM16 audio.
-      // Binary frames are explicitly NOT supported by this endpoint.
+      // ── CRITICAL FIX: Sarvam STT expects RAW BINARY PCM16 frames ─────────
+      // Sending JSON { audio_chunk: base64 } caused "audio must not be None"
+      // because Sarvam's server parses JSON looking for field "audio", finds
+      // nothing, and errors. The correct protocol is to send raw binary frames
+      // directly (same as how pipecat and other integrations work).
       const pcmAudio = this.mulawBufferToPcm16Buffer(mulawAudio);
-      if (pcmAudio.length === 0) return; // extra safety
-      this.sarvamSttWs.send(JSON.stringify({
-        audio_chunk: pcmAudio.toString('base64')
-      }));
+      if (pcmAudio.length === 0) return;
+      this.sarvamSttWs.send(pcmAudio);  // ← binary frame, no JSON wrapper
     }
   }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // Lifecycle helpers
