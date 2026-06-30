@@ -75,12 +75,14 @@ export class VoiceAgent {
     this.sarvamTtsApiKey = process.env.SARVAM_TTS_API_KEY || this.sarvamApiKey;
     this.sarvamTtsModel = process.env.SARVAM_TTS_MODEL || 'bulbul:v3';
     this.sarvamTtsLanguage = process.env.SARVAM_TTS_LANGUAGE || 'ta-IN';
-    this.sarvamTtsSpeaker = process.env.SARVAM_TTS_SPEAKER || 'anushka';
+    this.sarvamTtsSpeaker = process.env.SARVAM_TTS_SPEAKER || 'priya';
     this.sarvamTtsPace = Number(process.env.SARVAM_TTS_PACE || 1);
+    this.sarvamTtsTemperature = Number(process.env.SARVAM_TTS_TEMPERATURE || 0.4);
     this.sarvamTtsMinBufferSize = Number(process.env.SARVAM_TTS_MIN_BUFFER_SIZE || 50);
     this.sarvamTtsMaxChunkLength = Number(process.env.SARVAM_TTS_MAX_CHUNK_LENGTH || 200);
     this.sarvamTtsAudioCodec = process.env.SARVAM_TTS_AUDIO_CODEC || 'mulaw';
     this.sarvamTtsSampleRate = Number(process.env.SARVAM_TTS_SAMPLE_RATE || 8000);
+    this.sarvamTtsFrameMs = Number(process.env.SARVAM_TTS_FRAME_MS || 120);
 
     // ── Phase 2: Config cache — no disk I/O per utterance ────────────────────
     this.cachedSystemPrompt = '';
@@ -101,6 +103,7 @@ export class VoiceAgent {
     this.sarvamTtsWsConfigSent = false;    // Config frame sent on this connection?
     this.sarvamTtsCurrentResolve = null;   // Resolve fn for in-flight chunk
     this.sarvamTtsCurrentBytesSent = 0;    // Bytes received for current chunk
+    this.sarvamTtsAudioBuffer = Buffer.alloc(0);
 
     // ── Response Timing Tracking ──────────────────────────────────────────────
     // Tracks exact latency for each conversational turn:
@@ -111,6 +114,15 @@ export class VoiceAgent {
     this.llmFirstTokenAt = 0;
     this.firstAudioSentAt = 0;
     this.turnFirstAudioRecorded = false; // gate to fire onAiTiming only once per turn
+
+    // ── Filler audio config ────────────────────────────────────────────────────
+    // ENABLE_FILLER_RESPONSE=true: plays a short acknowledgment phrase IMMEDIATELY
+    // when the user stops speaking (before LLM generates a reply). This hides
+    // LLM+TTS latency — caller hears audio in ~300ms instead of ~1.5s.
+    this.enableFillerResponse = process.env.ENABLE_FILLER_RESPONSE === 'true';
+    this.fillerPhrases = (process.env.FILLER_PHRASES || 'சரி.,ஒரு நிமிஷம்.,ஆமா.')
+      .split(',').map(p => p.trim()).filter(Boolean);
+    this.fillerIndex = 0; // rotate through phrases so it doesn't sound repetitive
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -119,10 +131,24 @@ export class VoiceAgent {
 
   /**
    * Start the AI connections.
+   * Also pre-warms the Sarvam TTS WebSocket so turn-1 has zero cold-start penalty.
    */
   async start() {
     console.log('[Agent] Initializing AI streams...');
     this.connectSarvamStt();
+
+    // Pre-warm TTS: open the persistent WS and send an empty flush.
+    // This ensures the connection + config handshake completes before the
+    // first real utterance arrives, saving 300–500ms on the very first turn.
+    try {
+      await this.ensureSarvamTtsConnected();
+      if (this.sarvamTtsWs && this.sarvamTtsWs.readyState === WebSocket.OPEN) {
+        this.sarvamTtsWs.send(JSON.stringify({ type: 'flush' }));
+        console.log('[TTS Pre-warm] Warm-up flush sent. TTS pipeline ready.');
+      }
+    } catch (err) {
+      console.warn('[TTS Pre-warm] Failed (non-fatal):', err.message);
+    }
   }
 
   /**
@@ -226,7 +252,11 @@ export class VoiceAgent {
 
     this.sarvamSttWs.on('message', (data) => {
       try {
-        const response = JSON.parse(data);
+        // ── Debug: log every raw STT message to diagnose response format ──
+        const rawStr = data.toString();
+        console.log('[Sarvam STT] Raw message:', rawStr.substring(0, 300));
+
+        const response = JSON.parse(rawStr);
 
         if (response.type === 'error' || response.error) {
           console.error('[Sarvam STT] API error:', response);
@@ -235,8 +265,22 @@ export class VoiceAgent {
           return;
         }
 
-        const transcript = (response.data?.transcript || response.transcript || '').trim();
-        if (!transcript) return;
+        // Try all known field paths for Sarvam Saaras v1/v2/v3
+        const transcript = (
+          response.transcript ||
+          response.data?.transcript ||
+          response.results?.[0]?.alternatives?.[0]?.transcript ||
+          response.text ||
+          ''
+        ).trim();
+
+        if (!transcript) {
+          // Log non-empty non-transcript messages for debugging
+          if (rawStr.length > 2) {
+            console.log('[Sarvam STT] Message with no transcript field:', JSON.stringify(response).substring(0, 200));
+          }
+          return;
+        }
 
         const normalizedTranscript = this.normalizeTranscript(transcript);
         this.statusCallbacks.onUserTranscript(normalizedTranscript, true);
@@ -348,6 +392,7 @@ export class VoiceAgent {
             speaker: this.sarvamTtsSpeaker,
             target_language_code: this.sarvamTtsLanguage,
             pace: this.sarvamTtsPace,
+            temperature: this.sarvamTtsTemperature,
             min_buffer_size: this.sarvamTtsMinBufferSize,
             max_chunk_length: this.sarvamTtsMaxChunkLength,
             output_audio_codec: this.sarvamTtsAudioCodec,
@@ -379,8 +424,8 @@ export class VoiceAgent {
           if (audioBase64) {
             const audioChunk = Buffer.from(audioBase64, 'base64');
             if (audioChunk.length > 0 && this.isSpeaking && !this.isClosed) {
-              this.sarvamTtsCurrentBytesSent += audioChunk.length;
-              this.sendAudioToPlivo(audioChunk);
+              this.sarvamTtsAudioBuffer = Buffer.concat([this.sarvamTtsAudioBuffer, audioChunk]);
+              this.flushSarvamTtsAudioFrames(false);
 
               // ── Timing: record first audio sent this turn ──────────────────
               if (!this.turnFirstAudioRecorded && this.turnStartedAt > 0) {
@@ -404,6 +449,7 @@ export class VoiceAgent {
             eventType === 'final' || eventType === 'completed' ||
             eventType === 'done' || message.done === true
           ) {
+            this.flushSarvamTtsAudioFrames(true);
             if (this.sarvamTtsCurrentResolve) {
               const res = this.sarvamTtsCurrentResolve;
               const bytesSent = this.sarvamTtsCurrentBytesSent;
@@ -447,6 +493,26 @@ export class VoiceAgent {
     });
   }
 
+  flushSarvamTtsAudioFrames(force = false) {
+    const frameBytes = Math.max(
+      160,
+      Math.round(this.sarvamTtsSampleRate * this.sarvamTtsFrameMs / 1000)
+    );
+
+    while (
+      this.sarvamTtsAudioBuffer.length >= frameBytes ||
+      (force && this.sarvamTtsAudioBuffer.length > 0)
+    ) {
+      const bytesToSend = force
+        ? Math.min(frameBytes, this.sarvamTtsAudioBuffer.length)
+        : frameBytes;
+      const frame = this.sarvamTtsAudioBuffer.subarray(0, bytesToSend);
+      this.sarvamTtsAudioBuffer = this.sarvamTtsAudioBuffer.subarray(bytesToSend);
+      this.sarvamTtsCurrentBytesSent += frame.length;
+      this.sendAudioToPlivo(frame);
+    }
+  }
+
   /**
    * Phase 4: Synthesize a single text chunk using the persistent TTS WebSocket.
    * Sends text + flush, awaits the 'final' event, returns number of bytes sent.
@@ -457,7 +523,8 @@ export class VoiceAgent {
       console.error('[Sarvam TTS] Missing API key.');
       return 0;
     }
-    if (!text || !text.trim()) return 0;
+    const normalizedText = this.normalizeTextForTts(text || '');
+    if (!normalizedText) return 0;
 
     try {
       await this.ensureSarvamTtsConnected();
@@ -472,6 +539,7 @@ export class VoiceAgent {
 
     // Reset per-chunk tracking
     this.sarvamTtsCurrentBytesSent = 0;
+    this.sarvamTtsAudioBuffer = Buffer.alloc(0);
 
     return new Promise((resolve) => {
       let settled = false;
@@ -494,7 +562,7 @@ export class VoiceAgent {
       };
 
       // Send text + flush to trigger synthesis of this chunk
-      this.sarvamTtsWs.send(JSON.stringify({ type: 'text', data: { text: text.trim() } }));
+      this.sarvamTtsWs.send(JSON.stringify({ type: 'text', data: { text: normalizedText } }));
       this.sarvamTtsWs.send(JSON.stringify({ type: 'flush' }));
     });
   }
@@ -505,7 +573,7 @@ export class VoiceAgent {
    * marking the agent idle (so the caller's next words are captured).
    */
   async synthesizeSpeech(text) {
-    const cleanText = text.replace(/\s+/g, ' ').trim();
+    const cleanText = this.normalizeTextForTts(text);
     if (!cleanText || this.isClosed || !this.isSpeaking) return false;
 
     const startedAt = Date.now();
@@ -526,6 +594,14 @@ export class VoiceAgent {
       }
       return false;
     }
+  }
+
+  normalizeTextForTts(text) {
+    return text
+      .replace(/([A-Za-z0-9])([\u0B80-\u0BFF])/g, '$1 $2')
+      .replace(/([\u0B80-\u0BFF])([A-Za-z0-9])/g, '$1 $2')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -708,6 +784,7 @@ export class VoiceAgent {
     this.isSpeaking = true;
     this.outboundAudioBuffer = Buffer.alloc(0);
     this.outboundBytesSent = 0;
+    this.endCallAfterSpeech = false; // Reset: user is still on the call
     this.history.push({ role: 'user', content: transcript });
     this.statusCallbacks.onStateChange('active');
     this.clearSilenceTimer();
@@ -725,6 +802,17 @@ export class VoiceAgent {
     this.firstAudioSentAt = 0;
     this.turnFirstAudioRecorded = false;
 
+    // ── Fix 2: Instant filler audio ────────────────────────────────────
+    // Enqueue a short acknowledgment phrase BEFORE calling LLM.
+    // Sarvam synthesizes this in ~300ms → caller hears audio immediately.
+    // The full LLM response is queued after and plays seamlessly after filler.
+    if (this.enableFillerResponse && this.fillerPhrases.length > 0) {
+      const filler = this.fillerPhrases[this.fillerIndex % this.fillerPhrases.length];
+      this.fillerIndex++;
+      console.log(`[Filler] Enqueuing instant filler: "${filler}"`);
+      this.enqueueTtsChunk(filler);
+    }
+
     // Phase 2: Use cached config — zero disk I/O
     const systemPrompt = this.cachedSystemPrompt;
     const knowledgeBase = this.cachedKnowledgeBase;
@@ -736,6 +824,7 @@ VOICE COST AND FLOW RULES:
 - Maximum 12 words per reply.
 - Ask exactly one question at the end.
 - Understand meaning from natural Tamil/Tanglish, not exact yes/no keywords.
+- Write spoken Tamil in Tamil script. Keep genuine English terms in English; never write romanized Tanglish.
 - Detect positive, negative, continue, refusal, confusion, and question intent from context.
 - Treat phrases like "இல்லைங்க", "நா பண்ணல", "illanga", "pannala" as no.
 - Treat phrases like "ஆமாங்க", "சரி", "சொல்லுங்க", "okay", "pannirukken" as yes/continue when context fits.
@@ -747,8 +836,8 @@ VOICE COST AND FLOW RULES:
 
     const combinedSystemContext = `${systemPrompt}\n\n${voiceCostControlRules}\n\nKNOWLEDGE BASE CONTEXT:\n${knowledgeBase}`;
 
-    // Keep last 12 history entries to limit context size and keep LLM fast
-    const historyWindow = this.history.slice(-12);
+    // Keep last 8 history entries — tighter context = faster LLM inference
+    const historyWindow = this.history.slice(-8);
     const messages = [
       { role: 'system', content: combinedSystemContext },
       ...historyWindow
@@ -842,7 +931,7 @@ VOICE COST AND FLOW RULES:
 
       // Ensure fallback text if LLM returned nothing
       if (completeAiResponseText.trim().length === 0) {
-        completeAiResponseText = 'Sorry, sariyaa kekkala. Innum oru thadava sollunga.';
+        completeAiResponseText = 'Sorry, சரியாக கேட்கவில்லை. இன்னொரு முறை சொல்லுங்க.';
       }
 
       console.log(`[OpenAI] AI Complete Response: "${completeAiResponseText}"`);
@@ -931,7 +1020,7 @@ VOICE COST AND FLOW RULES:
         event: 'playAudio',
         media: {
           contentType: 'audio/x-mulaw',
-          sampleRate: 8000,
+          sampleRate: '8000',
           payload: base64Payload
         }
       };
@@ -995,13 +1084,11 @@ VOICE COST AND FLOW RULES:
     if (this.isClosed) return;
     if (this.sarvamSttWs && this.sarvamSttWs.readyState === WebSocket.OPEN) {
       const mulawAudio = Buffer.from(base64Payload, 'base64');
+      // Sarvam STT requires JSON text frames with base64-encoded PCM16 audio.
+      // Binary frames are explicitly NOT supported by this endpoint.
       const pcmAudio = this.mulawBufferToPcm16Buffer(mulawAudio);
       this.sarvamSttWs.send(JSON.stringify({
-        audio: {
-          data: pcmAudio.toString('base64'),
-          sample_rate: 8000,
-          encoding: 'audio/wav'
-        }
+        audio_chunk: pcmAudio.toString('base64')
       }));
     }
   }
