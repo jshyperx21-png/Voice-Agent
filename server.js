@@ -17,6 +17,13 @@ app.use(express.static('public'));
 // Map<agentId (UUID), VoiceAgent> — supports unlimited simultaneous calls.
 // Previously: let activeAgent = null (single-call only).
 const activeAgents = new Map();
+let activeTtsProvider = (process.env.TTS_PROVIDER || 'sarvam').toLowerCase();
+
+const ttsProviderAvailability = () => ({
+  sarvam: Boolean(process.env.SARVAM_TTS_API_KEY || process.env.SARVAM_API_KEY),
+  elevenlabs: Boolean(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_VOICE_ID),
+  cartesia: Boolean(process.env.CARTESIA_API_KEY && process.env.CARTESIA_VOICE_ID)
+});
 
 // Dashboard UI clients
 const browserClients = new Set();
@@ -118,6 +125,26 @@ app.post('/api/config', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to save config files.' });
   }
+});
+
+app.get('/api/tts-provider', (req, res) => {
+  res.json({ provider: activeTtsProvider, available: ttsProviderAvailability() });
+});
+
+app.post('/api/tts-provider', (req, res) => {
+  const provider = String(req.body?.provider || '').toLowerCase();
+  const available = ttsProviderAvailability();
+  if (!Object.hasOwn(available, provider)) {
+    return res.status(400).json({ error: 'Provider must be sarvam, elevenlabs, or cartesia.' });
+  }
+  if (!available[provider]) {
+    return res.status(400).json({ error: `${provider} credentials are not configured.` });
+  }
+  activeTtsProvider = provider;
+  for (const agent of activeAgents.values()) agent.setTtsProvider(provider);
+  broadcastToBrowsers({ event: 'tts-provider', provider });
+  console.log(`[TTS] Active provider changed to ${provider}.`);
+  res.json({ success: true, provider, activeAgentsUpdated: activeAgents.size });
 });
 
 /**
@@ -235,6 +262,7 @@ wssStream.on('connection', (ws, req) => {
       broadcastToBrowsers({ event: 'error', message: errMsg, agentId });
     }
   });
+  agent.setTtsProvider(activeTtsProvider);
 
   // Phase 5: Register in concurrent agents Map
   activeAgents.set(agentId, agent);

@@ -1,173 +1,245 @@
-# Knowledge Base — Shanmuga Hospital
-### Full Body Checkup & Organ Health Checkup Packages
-*(Real call transcripts-ல இருந்து எடுக்கப்பட்ட accurate prices & details)*
+# Shanmuga Hospital Knowledge Base
+
+## Hospital
+
+Hospital Name
+
+Shanmuga Hospital
+
+Location
+
+Chinnapudur,
+LRN Colony,
+Salem.
+
+Route
+
+New Bus Stand
+
+↓
+
+Five Roads
+
+↓
+
+Sarada College Road
+
+↓
+
+Ramakrishna Stop
+
+↓
+
+Near the Bridge
 
 ---
 
-## Package 1 — Silver (₹1,650 / "ஆயிரத்து அறுநூற்று ஐம்பது ரூபாய்", 50% discount)
+# Silver Package
 
-**Explain பண்ணும்போது இது மாதிரி சொல்லு:**
-> "Silver Packageல complete blood count, blood grouping, sugar levels (fasting, post-prandial, HbA1c), urea, creatinine, lipid profile (good cholesterol, total cholesterol, triglycerides), urine test, ECG, chest X-ray, and Liver blood test இதெல்லாம் cover ஆகும். இதோட cost ஆயிரத்து அறுநூற்று ஐம்பது ரூபாய்."
+Price
 
-**யாருக்கு recommend பண்ண வேண்டியது:** "நார்மல் செக்கப்", "basic checkup" கேட்பவங்களுக்கு.
+₹1,650
 
-**Full details:**
-- Complete blood count (CBC)
-- Blood grouping
-- Sugar — fasting, post-prandial, HbA1c
-- Urea & Creatinine
-- Lipid profile — HDL, Total Cholesterol, Triglycerides
-- Urine test
-- ECG
-- Chest X-ray
-- Liver blood test
-- 1 doctor consultation
+(50% Discount)
 
----
+Includes
 
-## Package 2 — Gold (₹4,950 / "நான்கு ஆயிரத்து தொள்ளாயிரத்து ஐம்பது ரூபாய்", 50% discount)
+* Complete Blood Count (CBC)
+* Blood Group
+* Fasting Blood Sugar
+* Post Meal Sugar
+* HbA1c
+* Urea
+* Creatinine
+* Lipid Profile
+* HDL
+* Total Cholesterol
+* Triglycerides
+* Urine Test
+* ECG
+* Chest X-Ray
+* Liver Function Test
+* One Doctor Consultation
 
-**Explain பண்ணும்போது இது மாதிரி சொல்லு:**
-> "Gold Packageல Silver Packageல இருக்குற எல்லா testஉம் plus thyroid, calcium, iron, Vitamin D, Vitamin B12, heart related tests, ECHO scan, abdomen scan, dental checkup எல்லாமே சேத்து வரும். Breakfastஉம் include ஆகும், ஒரு doctor consultationஉம் இருக்கு. Cost நான்கு ஆயிரத்து தொள்ளாயிரத்து ஐம்பது ரூபாய்."
+Customer Explanation
 
-**யாருக்கு recommend பண்ண வேண்டியது:** "ஜெனரலா ஆல் பாடி செக்கப்" கேட்பவங்களுக்கு.
-
-**Full details:**
-- Silver package-ல எல்லாம் +
-- Thyroid
-- Calcium
-- Iron studies
-- Vitamin D
-- Vitamin B12
-- Homocysteine
-- hs-CRP
-- Electrolytes
-- Echo (2D)
-- Abdomen scan
-- Dental checkup
-- Breakfast
-- 1 doctor consultation
-
-**⚠️ Price correction note:** Caller "₹4,500 ஆகுமா" எனக் கேட்டா — correct பண்ணு: "இல்லங்க, Gold Packageோட offer price நான்கு ஆயிரத்து தொள்ளாயிரத்து ஐம்பது ரூபாய்."
+"Silver package ஒரு basic full body health checkup. Blood test, sugar test, kidney, liver, ECG, chest X-ray, urine test, doctor consultation எல்லாமே இதில் இருக்கும்."
 
 ---
 
-## Package 3 — Platinum (₹7,980 / "ஏழு ஆயிரத்து தொள்ளாயிரத்து எண்பது ரூபாய்", 50% discount)
+# Gold Package
 
-**Explain பண்ணும்போது இது மாதிரி சொல்லு:**
-> "Platinum Packageல Silver மற்றும் Gold Packageல இருக்குற எல்லா testஉம் cover ஆகும். கூடவே ESR, viral markers (HIV, Hep B, Hep C), PFT, carotid doppler, ABI, magnesium, phosphorous, apolipoprotein A & B போன்ற additional testsஉம் இருக்கு. இதுல நாலு doctor consultationsஉம் இருக்கு. Price ஏழு ஆயிரத்து தொள்ளாயிரத்து எண்பது ரூபாய்."
+Price
 
-**யாருக்கு recommend பண்ண வேண்டியது:** "உச்ச நிலைமை", "எல்லாமே வேணும்", "complete detail" கேட்பவங்களுக்கு.
+₹4,950
 
-**Full details:**
-- Silver + Gold packages எல்லாம் +
-- ESR
-- Viral markers — HIV, Hepatitis B, Hepatitis C
-- PFT (lung function test)
-- Carotid Doppler scan
-- Ankle-Brachial Index (ABI)
-- Magnesium
-- Phosphorus
-- Apolipoprotein A & B
-- 4 doctor consultations
+(50% Discount)
 
----
+Includes
 
-## Package Comparison Table
+Everything in Silver Package plus
 
-| Package | Price | Doctor Consult | Breakfast | Special |
-|---|---|---|---|---|
-| Silver | ₹1,650 | 1 | இல்லை | Basic full body checkup |
-| Gold | ₹4,950 | 1 | உண்டு | Thyroid, Vitamins, Scans |
-| Platinum | ₹7,980 | 4 | உண்டு | Viral markers, Doppler scan, PFT |
+* Thyroid
+* Calcium
+* Iron
+* Iron Binding Capacity
+* Vitamin D
+* Vitamin B12
+* Homocysteine
+* HS-CRP
+* Electrolytes
+* Echo Scan
+* Abdomen Scan
+* Dental Checkup
+* Breakfast
+* One Doctor Consultation
 
----
+Customer Explanation
 
-## Organ-wise Health Checkup Packages
-
-Full body package எடுக்காம, ஒரு specific உறுப்புக்கு மட்டும் checkup வேணும்னா இந்த packages:
-Renal (Kidney), Liver, Heart, Lungs, Ortho (Bones & Joints), Gastro (Digestive System)
-
-### Ortho Health Checkup (Bones & Joints) — ₹1,499 / "ஆயிரத்து நானூற்று தொண்ணூற்று ஒன்பது ரூபாய்"
-**Explain பண்ணும்போது இது மாதிரி சொல்லு:**
-> "உடம்பு வலிக்குதுனா, Ortho Health Checkup Package நல்லா இருக்கும். இதுல X-Ray (2 views), ESR, CRP, Calcium, Vitamin D, Uric Acid, RA Factor போன்ற testகள் அடங்கும். Price ஆயிரத்து நானூற்று தொண்ணூற்று ஒன்பது ரூபாய்."
-
-**யாருக்கு recommend பண்ண வேண்டியது:** உடம்பு வலி, எலும்பு/மூட்டு பிரச்சனை சொல்பவங்களுக்கு.
-
-**Full details:**
-- X-Ray (2 views)
-- ESR
-- CRP
-- Calcium
-- Vitamin D
-- Uric Acid
-- RA Factor
-
-### Cardiac Health Checkup (Heart) — ₹2,950 / "இரண்டாயிரத்து தொள்ளாயிரத்து ஐம்பது ரூபாய்"
-**Explain பண்ணும்போது இது மாதிரி சொல்லு:**
-> "Heart health பத்தி detailedஆ பாக்கணும்னா Cardiac Health Checkup நல்லா இருக்கும். இதுல CBC, fasting blood sugar, post-prandial blood sugar, HbA1c, urea, creatinine, lipid profile, homocysteine, hs-CRP, urine complete analysis, apolipoprotein A1 & B, ECG, Echo, Treadmill Test, physical examination, ஒரு cardiologist consultation இதெல்லாம் cover ஆகும். Price இரண்டாயிரத்து தொள்ளாயிரத்து ஐம்பது ரூபாய்."
-
-**யாருக்கு recommend பண்ண வேண்டியது:** Heart சம்பந்தப்பட்ட doubt/concern சொல்பவங்களுக்கு (Silver Packageல ECG & lipid profile மட்டும் இருக்கும் என்பதால், detailed heart check வேணும்னா இது suggest பண்ணு).
-
-**Full details:**
-- CBC
-- Fasting blood sugar, Post-prandial blood sugar, HbA1c
-- Urea, Creatinine
-- Lipid profile
-- Homocysteine
-- hs-CRP
-- Urine complete analysis
-- Apolipoprotein A1 & B
-- ECG
-- Echo
-- Treadmill Test (TMT)
-- Physical examination
-- 1 cardiologist consultation
-
-### Renal (Kidney) / Liver / Lungs / Gastro (Digestive System) Packages
-Price & test details இன்னும் KB-ல இல்லை.
-Caller கேட்டா → **"Sales team confirm பண்ணுவாங்க."**
+"Gold packageல Silverல இருக்குற எல்லா testஉம் இருக்கும். கூடவே thyroid, vitamin tests, calcium, abdomen scan, echo scan, dental checkup, breakfast கூட include ஆகும்."
 
 ---
 
-## Cancer Screening Test (Add-on)
+# Platinum Package
 
-எந்த package-உடனும் சேர்த்துக்கலாம்.
+Price
 
-| யாருக்கு | Price | Silver + Cancer Test மொத்தம் |
-|---|---|---|
-| ஆண்களுக்கு | ₹750 | ₹2,400 |
-| பெண்களுக்கு | ₹1,100 | ₹2,750 |
+₹7,980
 
-Caller "எந்த வகை cancer"ன்னு கேட்டா →
-> "இது early stage cancer கண்டுபிடிக்க உதவும் test, exact details sales team சொல்லுவாங்க."
+(50% Discount)
 
----
+Includes
 
-## Fasting Rules
+Everything in Gold Package plus
 
-- Test-க்கு முன்னாடி குறைந்தது 8 மணி நேரம் fasting வேணும்.
-- தண்ணி குடிக்கலாம்.
-- Tea, coffee, juice குடிக்கக்கூடாது.
-- தெரியாம சாப்பிட்டா/குடிச்சா — fasting test முடியாது, சாதாரண (random) blood test மட்டும் எடுக்கலாம்.
+* ESR
+* Viral Markers
+* HIV
+* Hepatitis A
+* Hepatitis E
+* Pulmonary Function Test
+* Carotid Doppler
+* ABI
+* Magnesium
+* Phosphorus
+* Apolipoprotein A
+* Apolipoprotein B
+* Four Doctor Consultations
 
----
+Customer Explanation
 
-## Hospital Details & Route
-
-- **பேர்:** Shanmuga Hospital
-- **இடம்:** Salem — சின்னபுதூர், LRN Colony
-
-**Route explanation (caller எந்த ஊர்ல இருந்து வர்றாங்கன்னு கேட்டு, அதுக்கேத்த மாதிரி explain பண்ணு):**
-> "எங்க hospital Salem சின்ன புதூர்ல LRN colonyல இருக்கு. நீங்க Salem new bus stand வந்துட்டு, அங்க இருந்து five roadsக்கு வரணும். Hasthampattiக்கு போற வழில ஷாரதா college roadல வந்தீங்கனா, Ramakrishna stop கிட்ட இருக்குற bridgeக்கு கீழ left sideல எங்க hospital இருக்கு."
-
-(Example: Erode/Gounthapadi-ல இருந்து வர்றவங்களுக்கும் இதே route reference பண்ணலாம்.)
+"Platinum packageல Gold packageல இருக்குற எல்லாமே இருக்கும். கூடவே virus screening, lung test, blood vessel scan, additional advanced tests, நாலு doctor consultation இருக்கும்."
 
 ---
 
-## Off-scope Medical Issues (Transfer வேண்டியவை)
+# Package Comparison
 
-Full body checkup packages-க்கு வெளியே இருக்கிற issues (skin condition/allergy, boils turning into scars, dental beyond scope, etc.) கேட்டா:
-- நாங்க full body checkup packages-தான் provide பண்றோம் எனச் சொல்லு.
-- "callஐ [relevant] specialistகிட்ட transfer பண்ண முடியும்" எனக் கேளு.
-- Positive-ஆ இருந்தா, Telecaller-க்கு transfer பண்ணு (system prompt Step 10 படி).
+Silver
+
+₹1,650
+
+Best for basic full body checkup.
+
+---
+
+Gold
+
+₹4,950
+
+Best for complete preventive health checkup.
+
+---
+
+Platinum
+
+₹7,980
+
+Best for advanced executive health checkup.
+
+---
+
+# Cancer Screening
+
+Can be added with any package.
+
+Male
+
+₹750
+
+Female
+
+₹1,100
+
+If customer asks which cancer is checked,
+
+reply
+
+"இந்த information Sales team confirm பண்ணுவாங்க."
+
+---
+
+# Individual Organ Packages
+
+Available for
+
+* Kidney
+* Liver
+* Heart
+* Lungs
+* Bone & Joint
+* Digestive System
+
+If customer asks
+
+price
+
+tests
+
+offer
+
+details
+
+reply
+
+"இந்த information Sales team confirm பண்ணுவாங்க."
+
+---
+
+# Fasting Instructions
+
+Customer should fast at least 8 hours.
+
+Water is allowed.
+
+Tea, Coffee and Juice are not allowed.
+
+If fasting is not followed,
+
+only non-fasting blood tests can be performed.
+
+---
+
+# Appointment Information
+
+Collect
+
+* Name
+* Age
+* Preferred Date
+* Preferred Time
+
+Repeat the details before confirming.
+
+---
+
+# Unknown Questions
+
+If information is unavailable,
+
+reply
+
+"இந்த information Sales team confirm பண்ணுவாங்க."
+
+Never guess.
+
+Never create new information.

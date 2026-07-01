@@ -67,6 +67,23 @@ export class VoiceAgent {
                           this.openaiApiUrl.includes('.services.ai.azure.com');
     this.enableBargeIn = process.env.ENABLE_BARGE_IN === 'true';
 
+    // Selectable TTS providers. Audio from every provider is normalized to
+    // 8 kHz G.711 mu-law before it is sent to Plivo.
+    this.ttsProvider = (process.env.TTS_PROVIDER || 'sarvam').toLowerCase();
+    this.elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
+    this.elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID;
+    this.elevenLabsModelId = process.env.ELEVENLABS_MODEL_ID || 'eleven_flash_v2_5';
+    this.elevenLabsOutputFormat = process.env.ELEVENLABS_OUTPUT_FORMAT || 'ulaw_8000';
+    this.elevenLabsStability = Number(process.env.ELEVENLABS_STABILITY || 0.5);
+    this.elevenLabsSimilarityBoost = Number(process.env.ELEVENLABS_SIMILARITY_BOOST || 0.8);
+    this.cartesiaApiKey = process.env.CARTESIA_API_KEY;
+    this.cartesiaModelId = process.env.CARTESIA_MODEL_ID || 'sonic-3';
+    this.cartesiaVoiceId = process.env.CARTESIA_VOICE_ID;
+    this.cartesiaLanguage = process.env.CARTESIA_LANGUAGE || 'ta';
+    this.cartesiaVersion = process.env.CARTESIA_VERSION || '2026-03-01';
+    this.cartesiaSpeed = Number(process.env.CARTESIA_SPEED || 1);
+    this.cartesiaVolume = Number(process.env.CARTESIA_VOLUME || 1);
+
     // Sarvam STT config
     this.sarvamApiKey = process.env.SARVAM_API_KEY;
     this.sarvamSttLanguage = process.env.SARVAM_STT_LANGUAGE || 'ta-IN';
@@ -147,13 +164,27 @@ export class VoiceAgent {
     // Pre-warm only the connection. An empty flush can emit a delayed `final`
     // event and incorrectly complete the real greeting synthesis.
     try {
-      await this.ensureSarvamTtsConnected();
-      if (this.sarvamTtsWs && this.sarvamTtsWs.readyState === WebSocket.OPEN) {
+      if (this.ttsProvider === 'sarvam') await this.ensureSarvamTtsConnected();
+      if (this.ttsProvider === 'sarvam' && this.sarvamTtsWs && this.sarvamTtsWs.readyState === WebSocket.OPEN) {
         console.log('[TTS Pre-warm] Connection configured. TTS pipeline ready.');
       }
     } catch (err) {
       console.warn('[TTS Pre-warm] Failed (non-fatal):', err.message);
     }
+  }
+
+  setTtsProvider(provider) {
+    const normalized = String(provider || '').toLowerCase();
+    if (!['sarvam', 'elevenlabs', 'cartesia'].includes(normalized)) {
+      throw new Error(`Unsupported TTS provider: ${provider}`);
+    }
+    this.ttsProvider = normalized;
+    if (normalized !== 'sarvam' && this.sarvamTtsWs) {
+      try { this.sarvamTtsWs.close(); } catch (_) {}
+      this.sarvamTtsWs = null;
+      this.sarvamTtsWsConfigSent = false;
+    }
+    console.log(`[TTS] Provider switched to ${normalized}.`);
   }
 
   /**
@@ -703,6 +734,106 @@ export class VoiceAgent {
     });
   }
 
+  async streamMulawHttpResponse(response, providerName) {
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => '')).substring(0, 300);
+      throw new Error(`${providerName} TTS returned HTTP ${response.status}: ${detail}`);
+    }
+    if (!response.body) throw new Error(`${providerName} TTS returned no audio stream.`);
+
+    let pending = Buffer.alloc(0);
+    let bytesSent = 0;
+    let framesSent = 0;
+    const frameBytes = 160; // 20 ms of 8 kHz mu-law audio
+    for await (const value of response.body) {
+      if (this.isClosed || !this.isSpeaking) break;
+      pending = Buffer.concat([pending, Buffer.from(value)]);
+      while (pending.length >= frameBytes) {
+        const frame = pending.subarray(0, frameBytes);
+        pending = pending.subarray(frameBytes);
+        if (!this.sendPlivoAudioFrame(frame)) continue;
+        bytesSent += frame.length;
+        framesSent++;
+        if (framesSent === 1) {
+          this.statusCallbacks.onTtsAudio({ status: 'sending', bytes: frame.length, streamId: this.streamId });
+          if (!this.turnFirstAudioRecorded && this.turnStartedAt > 0) {
+            this.turnFirstAudioRecorded = true;
+            this.firstAudioSentAt = Date.now();
+            const llmMs = this.llmFirstTokenAt ? this.llmFirstTokenAt - this.turnStartedAt : 0;
+            const ttsMs = this.llmFirstTokenAt ? this.firstAudioSentAt - this.llmFirstTokenAt : 0;
+            this.statusCallbacks.onAiTiming({ llmMs, ttsMs, totalMs: this.firstAudioSentAt - this.turnStartedAt });
+          }
+        }
+      }
+    }
+    if (pending.length && this.isSpeaking && this.sendPlivoAudioFrame(pending)) {
+      bytesSent += pending.length;
+      framesSent++;
+    }
+    this.statusCallbacks.onTtsAudio({ status: 'completed', bytes: bytesSent, frames: framesSent, streamId: this.streamId });
+    return bytesSent;
+  }
+
+  async synthesizeChunkWithElevenLabs(text) {
+    if (!this.elevenLabsApiKey || !this.elevenLabsVoiceId) {
+      throw new Error('ElevenLabs API key or voice ID is missing.');
+    }
+    const params = new URLSearchParams({ output_format: this.elevenLabsOutputFormat });
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(this.elevenLabsVoiceId)}/stream?${params}`,
+      {
+        method: 'POST',
+        headers: { 'xi-api-key': this.elevenLabsApiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          model_id: this.elevenLabsModelId,
+          voice_settings: {
+            stability: this.elevenLabsStability,
+            similarity_boost: this.elevenLabsSimilarityBoost
+          }
+        })
+      }
+    );
+    return this.streamMulawHttpResponse(response, 'ElevenLabs');
+  }
+
+  async synthesizeChunkWithCartesia(text) {
+    if (!this.cartesiaApiKey || !this.cartesiaVoiceId) {
+      throw new Error('Cartesia API key or voice ID is missing.');
+    }
+    const response = await fetch('https://api.cartesia.ai/tts/bytes', {
+      method: 'POST',
+      headers: {
+        'X-API-Key': this.cartesiaApiKey,
+        'Cartesia-Version': this.cartesiaVersion,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model_id: this.cartesiaModelId,
+        transcript: text,
+        voice: { mode: 'id', id: this.cartesiaVoiceId },
+        language: this.cartesiaLanguage,
+        output_format: { container: 'raw', encoding: 'pcm_mulaw', sample_rate: 8000 },
+        generation_config: { speed: this.cartesiaSpeed, volume: this.cartesiaVolume }
+      })
+    });
+    return this.streamMulawHttpResponse(response, 'Cartesia');
+  }
+
+  async synthesizeTtsChunk(text) {
+    const cleanText = this.normalizeTextForTts(text || '');
+    if (!cleanText) return 0;
+    try {
+      if (this.ttsProvider === 'elevenlabs') return await this.synthesizeChunkWithElevenLabs(cleanText);
+      if (this.ttsProvider === 'cartesia') return await this.synthesizeChunkWithCartesia(cleanText);
+      return await this.synthesizeChunkWithSarvam(cleanText);
+    } catch (error) {
+      console.error(`[${this.ttsProvider} TTS]`, error.message);
+      this.statusCallbacks.onTtsAudio({ status: 'error', message: error.message, streamId: this.streamId });
+      return 0;
+    }
+  }
+
   /**
    * Entry point for TTS. Used by speakGreeting() and speakAndMaybeEnd().
    * Synthesizes full text, then waits for estimated playback to complete before
@@ -714,7 +845,7 @@ export class VoiceAgent {
 
     const speechGeneration = this.ttsGeneration;
     const startedAt = Date.now();
-    const bytesSent = await this.synthesizeChunkWithSarvam(cleanText);
+    const bytesSent = await this.synthesizeTtsChunk(cleanText);
 
     if (bytesSent > 0 && this.isSpeaking && !this.isClosed) {
       const elapsedMs = Date.now() - startedAt;
@@ -723,7 +854,7 @@ export class VoiceAgent {
       setTimeout(() => {
         if (speechGeneration !== this.ttsGeneration || this.isClosed) return;
         const secondsSent = (bytesSent / this.sarvamTtsSampleRate).toFixed(2);
-        this.markAgentIdle(`[Sarvam TTS] Audio complete (${secondsSent}s). Agent idle.`);
+        this.markAgentIdle(`[${this.ttsProvider} TTS] Audio complete (${secondsSent}s). Agent idle.`);
       }, remainingMs);
       return true;
     } else {
@@ -789,7 +920,7 @@ export class VoiceAgent {
     while (this.ttsQueue.length > 0 && this.isSpeaking && !this.isClosed) {
       const item = this.ttsQueue.shift();
       if (!item || item.generation !== this.ttsGeneration) continue;
-      const bytesSent = await this.synthesizeChunkWithSarvam(item.text);
+      const bytesSent = await this.synthesizeTtsChunk(item.text);
       if (item.generation === this.ttsGeneration && bytesSent > 0) {
         this.ttsStreamTotalBytesSent += bytesSent;
       }
