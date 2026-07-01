@@ -751,7 +751,7 @@ export class VoiceAgent {
       while (pending.length >= frameBytes) {
         const frame = pending.subarray(0, frameBytes);
         pending = pending.subarray(frameBytes);
-        if (!this.sendPlivoAudioFrame(frame)) continue;
+        if (!this.sendAudioToPlivo(frame)) continue;
         bytesSent += frame.length;
         framesSent++;
         if (framesSent === 1) {
@@ -766,7 +766,7 @@ export class VoiceAgent {
         }
       }
     }
-    if (pending.length && this.isSpeaking && this.sendPlivoAudioFrame(pending)) {
+    if (pending.length && this.isSpeaking && this.sendAudioToPlivo(pending)) {
       bytesSent += pending.length;
       framesSent++;
     }
@@ -859,7 +859,7 @@ export class VoiceAgent {
       return true;
     } else {
       if (this.isSpeaking && !this.isClosed) {
-        this.markAgentIdle('[Sarvam TTS] No audio produced. Agent idle.');
+        this.markAgentIdle(`[${this.ttsProvider} TTS] No audio produced. Agent idle.`);
       }
       return false;
     }
