@@ -1100,7 +1100,8 @@ VOICE COST AND FLOW RULES:
 - If intent is unclear, ask the caller to repeat instead of advancing the flow.
 - Do not begin every response with filler acknowledgements such as சரி, ஆமா, ம்ம், or ஓகே.
 - Never repeat an acknowledgement already spoken in the same turn.
-- Maximum 12 words per reply.
+- Prefer concise replies of 12-24 words, but always finish the final sentence.
+- Never stop mid-word, mid-list, or mid-sentence; shorten the content before writing if needed.
 - Ask exactly one question at the end.
 - Understand meaning from natural Tamil/Tanglish, not exact yes/no keywords.
 - Write spoken Tamil in Tamil script. Keep genuine English terms in English; never write romanized Tanglish.
@@ -1146,8 +1147,8 @@ VOICE COST AND FLOW RULES:
       };
 
       const body = this.isResponsesApi
-        ? { input: messages, stream: true, max_output_tokens: 32, temperature: 0.35 }
-        : { messages: messages, stream: true, max_tokens: 32, temperature: 0.35 };
+        ? { input: messages, stream: true, max_output_tokens: 96, temperature: 0.35 }
+        : { messages: messages, stream: true, max_tokens: 96, temperature: 0.35 };
 
       if (!this.isAzureOpenAI && !this.isResponsesApi) {
         body.model = this.openaiModelId;
