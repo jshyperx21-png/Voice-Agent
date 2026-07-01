@@ -176,14 +176,20 @@ function testSarvamSTT() {
 
     ws.on('open', () => {
       const connectMs = Date.now() - start;
-      // Send 200ms of PCM16 silence to verify binary frames are accepted
+      // Send 200ms of PCM16 silence using Sarvam's JSON/base64 protocol.
       const silenceBuf = Buffer.alloc(3200, 0); // 200ms @ 8000Hz PCM16
-      ws.send(silenceBuf);
+      ws.send(JSON.stringify({
+        audio: {
+          data: silenceBuf.toString('base64'),
+          sample_rate: 8000,
+          encoding: 'audio/pcm'
+        }
+      }));
       // Give it 2s for any response, then declare healthy
       setTimeout(() => {
         clearTimeout(timer);
         ws.close();
-        resolve({ name, status: PASS, detail: `Connected & auth OK in ${connectMs}ms | Binary audio accepted` });
+        resolve({ name, status: PASS, detail: `Connected & auth OK in ${connectMs}ms | JSON/base64 audio accepted` });
       }, 2000);
     });
 

@@ -1305,20 +1305,22 @@ VOICE COST AND FLOW RULES:
   handleInboundAudio(base64Payload) {
     if (this.isClosed) return;
 
-    // ── Guard against empty payloads from Plivo at call start ────────────────
     if (!base64Payload || base64Payload.length < 4) return;
     const mulawAudio = Buffer.from(base64Payload, 'base64');
     if (mulawAudio.length === 0) return;
 
     if (this.sarvamSttWs && this.sarvamSttWs.readyState === WebSocket.OPEN) {
-      // ── CRITICAL FIX: Sarvam STT expects RAW BINARY PCM16 frames ─────────
-      // Sending JSON { audio_chunk: base64 } caused "audio must not be None"
-      // because Sarvam's server parses JSON looking for field "audio", finds
-      // nothing, and errors. The correct protocol is to send raw binary frames
-      // directly (same as how pipecat and other integrations work).
+      // Sarvam requires a JSON text frame with nested base64-encoded audio.
+      // The metadata must match the 8 kHz raw PCM connection settings.
       const pcmAudio = this.mulawBufferToPcm16Buffer(mulawAudio);
       if (pcmAudio.length === 0) return;
-      this.sarvamSttWs.send(pcmAudio);  // ← binary frame, no JSON wrapper
+      this.sarvamSttWs.send(JSON.stringify({
+        audio: {
+          data: pcmAudio.toString('base64'),
+          sample_rate: 8000,
+          encoding: 'audio/pcm'
+        }
+      }));
     }
   }
 
