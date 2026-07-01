@@ -474,9 +474,6 @@ export class VoiceAgent {
         try {
           const message = JSON.parse(data.toString());
 
-          // ── Fix #2: Full debug log every TTS frame (first 200 chars) ──────
-          console.log('[TTS DEBUG] Raw msg:', JSON.stringify(message).substring(0, 250));
-
           if (message.type === 'error' || message.error || message.data?.error) {
             console.error('[Sarvam TTS] API error:', message);
             if (this.sarvamTtsCurrentResolve && this.sarvamTtsCurrentWs === ws) {
@@ -502,7 +499,6 @@ export class VoiceAgent {
             // 'mulaw', causing 100% audio loss if Sarvam returns a different label.
             const contentType = message.data?.content_type || message.content_type || '';
             if (contentType) {
-              console.log(`[TTS DEBUG] content_type="${contentType}" audioBase64 length=${audioBase64.length}`);
               if (!contentType.toLowerCase().includes('mulaw') &&
                   !contentType.toLowerCase().includes('audio')) {
                 // Only reject truly unknown formats, not minor label variations
@@ -511,7 +507,6 @@ export class VoiceAgent {
             }
 
             const audioChunk = Buffer.from(audioBase64, 'base64');
-            console.log(`[TTS DEBUG] Decoded audioChunk: ${audioChunk.length} bytes`);
 
             if (audioChunk.length > 0 && this.isSpeaking && !this.isClosed) {
               this.sarvamTtsCurrentHasAudio = true;
@@ -887,17 +882,17 @@ export class VoiceAgent {
    * Returns true when the accumulated buffer should be flushed to TTS immediately.
    *
    * Rules:
-   *  - Hard boundary (.!?) with ≥1 word  → speak immediately (catches "சரி.", "Okay.")
-   *  - Soft boundary (,;।\n) with ≥3 words → speak (avoids super-short fragments)
-   *  - 12+ words with no boundary        → force-flush (prevents runaway buffers)
+   *  - Hard boundary (.!?) with at least 4 words → speak a natural phrase
+   *  - Soft boundary (,;।\n) with at least 6 words → avoid tiny fragments
+   *  - 16+ words with no boundary → force-flush to cap latency
    */
   isSpeakableBoundary(buffer) {
     const trimmed = buffer.trim();
     if (!trimmed) return false;
     const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
-    if (wordCount >= 12) return true; // force flush
-    if (/[.!?]$/.test(trimmed) && wordCount >= 1) return true;
-    if (/[,;।\n]$/.test(trimmed) && wordCount >= 3) return true;
+    if (wordCount >= 16) return true;
+    if (/[.!?]$/.test(trimmed) && wordCount >= 4) return true;
+    if (/[,;।\n]$/.test(trimmed) && wordCount >= 6) return true;
     return false;
   }
 
