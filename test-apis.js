@@ -182,7 +182,7 @@ function testSarvamSTT() {
         audio: {
           data: silenceBuf.toString('base64'),
           sample_rate: 8000,
-          encoding: 'audio/pcm'
+          encoding: 'audio/wav'
         }
       }));
       // Give it 2s for any response, then declare healthy

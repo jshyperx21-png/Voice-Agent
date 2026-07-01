@@ -629,122 +629,6 @@
       20%, 60% { transform: translateX(-4px); }
       40%, 80% { transform: translateX(4px); }
     }
-    /* ── Call Recording Panel ─────────────────────────────────────────────── */
-    .rec-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 0.2rem 0.6rem;
-      border-radius: 9999px;
-      background: rgba(239, 68, 68, 0.12);
-      border: 1px solid rgba(239, 68, 68, 0.25);
-      color: var(--danger);
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .rec-badge.active {
-      opacity: 1;
-    }
-    .rec-badge .rec-dot {
-      width: 0.45rem;
-      height: 0.45rem;
-      border-radius: 50%;
-      background: var(--danger);
-      animation: recPulse 1s infinite;
-    }
-    @keyframes recPulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.2; }
-    }
-    .rec-controls {
-      display: flex;
-      gap: 0.75rem;
-    }
-    .btn-rec-start {
-      flex: 1;
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      border: none;
-      color: white;
-      padding: 0.75rem;
-      border-radius: 0.75rem;
-      font-family: var(--font-sans);
-      font-weight: 600;
-      font-size: 0.9rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
-    }
-    .btn-rec-start:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.35);
-    }
-    .btn-rec-start:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-rec-stop {
-      flex: 1;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: var(--text);
-      padding: 0.75rem;
-      border-radius: 0.75rem;
-      font-family: var(--font-sans);
-      font-weight: 600;
-      font-size: 0.9rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      transition: transform 0.2s, opacity 0.2s;
-    }
-    .btn-rec-stop:hover:not(:disabled) { transform: translateY(-1px); }
-    .btn-rec-stop:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-download-mp3 {
-      width: 100%;
-      background: linear-gradient(135deg, #10b981, #059669);
-      border: none;
-      color: white;
-      padding: 0.85rem;
-      border-radius: 0.75rem;
-      font-family: var(--font-sans);
-      font-weight: 700;
-      font-size: 0.95rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
-      margin-top: 0.25rem;
-    }
-    .btn-download-mp3:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
-    }
-    .btn-download-mp3:disabled { opacity: 0.4; cursor: not-allowed; }
-    .rec-stats {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      padding: 0.5rem 0.75rem;
-      background: rgba(0,0,0,0.15);
-      border-radius: 0.6rem;
-      border: 1px solid rgba(255,255,255,0.04);
-    }
-    .rec-stats .stat-val { color: var(--text); font-weight: 600; }
-    .rec-info-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
   </style>
 </head>
 <body>
@@ -831,41 +715,6 @@
         </div>
       </section>
 
-      <!-- ── Call Recording Panel ─────────────────────────────────────── -->
-      <section class="glass-card" id="recordingCard">
-        <h2 class="card-title">
-          🎙️ Call Recording
-          <span class="rec-badge" id="recBadge">
-            <span class="rec-dot"></span> REC
-          </span>
-        </h2>
-
-        <div class="rec-info-row">
-          <span style="font-size:0.85rem;color:var(--text-muted);">Capture AI outbound audio then download as MP3</span>
-        </div>
-
-        <div class="rec-stats" id="recStats">
-          <span>Duration</span>
-          <span class="stat-val" id="recDuration">0.0s</span>
-          <span>Size</span>
-          <span class="stat-val" id="recSize">0 KB</span>
-        </div>
-
-        <div class="rec-controls">
-          <button class="btn-rec-start" id="btnRecStart" onclick="startRecording()" disabled>
-            ⏺ Start REC
-          </button>
-          <button class="btn-rec-stop" id="btnRecStop" onclick="stopRecording()" disabled>
-            ⏹ Stop
-          </button>
-        </div>
-
-        <button class="btn-download-mp3" id="btnDownloadMp3" onclick="downloadMp3()" disabled>
-          ⬇️ Download MP3
-        </button>
-
-        <div id="recStatusMsg" style="font-size:0.8rem;color:var(--text-muted);text-align:center;"></div>
-      </section>
 
     </div>
 
@@ -924,8 +773,6 @@
 </div>
 
 <script>
-  // ── lamejs CDN for browser-side MP3 encoding (no npm required) ──────────
-  const LAME_SCRIPT_URL = 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js';
 
   let statusWs = null;
   let activeDurationTimer = null;
@@ -938,11 +785,6 @@
   // ── Timing: stores the last ai-timing event, applied to the next finalized AI bubble
   let lastAiTiming = null;
 
-  // ── Recording state ───────────────────────────────────────────────────────
-  let currentAgentId = null;       // agentId of the active call
-  let recIsActive = false;         // recording in progress?
-  let recHasData = false;          // buffer ready for download?
-  let recTickInterval = null;      // live duration/size update interval
 
   // Page initialization
   window.addEventListener('DOMContentLoaded', () => {
@@ -1073,40 +915,16 @@
             updateCallState(msg.state);
             break;
 
-          case 'recording-state':
-            // Another tab or server push updated recording state
-            if (msg.agentId === currentAgentId) {
-              recIsActive = msg.isRecording || false;
-              if (msg.hasRecording) recHasData = true;
-              updateRecButtons();
-            }
-            break;
 
           case 'user-transcript':
-            if (msg.agentId && !currentAgentId) {
-              currentAgentId = msg.agentId;
-              updateRecButtons();
-            }
             handleUserTranscript(msg.text, msg.isFinal);
             break;
 
           case 'ai-transcript':
-            if (msg.agentId && !currentAgentId) {
-              currentAgentId = msg.agentId;
-              updateRecButtons();
-            }
             handleAiTranscript(msg.text, msg.isFinal);
             break;
 
           case 'agent-speaking':
-            // Capture agentId the first time we see it
-            if (msg.agentId && !currentAgentId) {
-              currentAgentId = msg.agentId;
-              recIsActive = false;
-              recHasData = false;
-              updateRecButtons();
-              setRecStatus('Call active — press Start REC to begin recording.');
-            }
             toggleAiSpeakingState(msg.isSpeaking);
             break;
 
@@ -1143,155 +961,6 @@
     };
   }
 
-  // ── Recording helpers ───────────────────────────────────────────────────
-
-  function setRecStatus(msg, color = 'var(--text-muted)') {
-    const el = document.getElementById('recStatusMsg');
-    if (el) { el.textContent = msg; el.style.color = color; }
-  }
-
-  function updateRecButtons() {
-    const hasCall = !!currentAgentId;
-    document.getElementById('btnRecStart').disabled = !hasCall || recIsActive;
-    document.getElementById('btnRecStop').disabled = !recIsActive;
-    document.getElementById('btnDownloadMp3').disabled = !recHasData;
-    const badge = document.getElementById('recBadge');
-    if (recIsActive) badge.classList.add('active');
-    else badge.classList.remove('active');
-  }
-
-  function startRecStatsTicker() {
-    stopRecStatsTicker();
-    recTickInterval = setInterval(async () => {
-      if (!currentAgentId || !recIsActive) return;
-      // Fetch live byte count from /api/calls
-      try {
-        const res = await fetch('/api/calls');
-        const data = await res.json();
-        const call = data.calls?.find(c => c.agentId === currentAgentId);
-        if (call) {
-          // approximate from agentId presence only; actual bytes from download endpoint is not polled
-        }
-      } catch (_) {}
-    }, 2000);
-  }
-
-  function stopRecStatsTicker() {
-    if (recTickInterval) { clearInterval(recTickInterval); recTickInterval = null; }
-  }
-
-  async function startRecording() {
-    if (!currentAgentId) return setRecStatus('No active call to record.', 'var(--warning)');
-    try {
-      const res = await fetch(`/api/recording/${currentAgentId}/start`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      recIsActive = true;
-      recHasData = false;
-      document.getElementById('recDuration').textContent = '...';
-      document.getElementById('recSize').textContent = '...';
-      setRecStatus('Recording in progress…', '#ef4444');
-      updateRecButtons();
-    } catch (err) {
-      setRecStatus(`Error: ${err.message}`, 'var(--danger)');
-    }
-  }
-
-  async function stopRecording() {
-    if (!currentAgentId || !recIsActive) return;
-    try {
-      const res = await fetch(`/api/recording/${currentAgentId}/stop`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      recIsActive = false;
-      recHasData = true;
-      document.getElementById('recDuration').textContent = `${data.durationSeconds}s`;
-      document.getElementById('recSize').textContent = `${(data.bytes / 1024).toFixed(1)} KB`;
-      setRecStatus('Recording saved. Ready to download.', 'var(--success)');
-      updateRecButtons();
-    } catch (err) {
-      setRecStatus(`Error: ${err.message}`, 'var(--danger)');
-    }
-  }
-
-  /**
-   * Download recording as MP3.
-   * Flow: fetch WAV from server → decode with Web Audio API → encode MP3 with lamejs → trigger download.
-   */
-  async function downloadMp3() {
-    if (!currentAgentId) return;
-    const btn = document.getElementById('btnDownloadMp3');
-    btn.disabled = true;
-    btn.textContent = '⏳ Encoding MP3…';
-    setRecStatus('Downloading audio and encoding MP3…', 'var(--text-muted)');
-    try {
-      // 1. Fetch WAV from server
-      const res = await fetch(`/api/recording/${currentAgentId}/download`);
-      if (!res.ok) throw new Error(await res.text());
-      const wavArrayBuffer = await res.arrayBuffer();
-
-      // 2. Decode WAV with Web Audio API
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
-      const audioBuffer = await audioCtx.decodeAudioData(wavArrayBuffer);
-      audioCtx.close();
-
-      // 3. Load lamejs encoder dynamically if not already loaded
-      if (!window.lamejs) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = LAME_SCRIPT_URL;
-          s.onload = resolve;
-          s.onerror = () => reject(new Error('Failed to load MP3 encoder. Check internet connection.'));
-          document.head.appendChild(s);
-        });
-      }
-
-      // 4. Encode PCM to MP3 using lamejs
-      const samples = audioBuffer.getChannelData(0); // Float32Array, mono
-      const sampleRate = audioBuffer.sampleRate;
-      const mp3encoder = new lamejs.Mp3Encoder(1, sampleRate, 64); // mono, 8kHz, 64kbps
-      const pcmInt16 = new Int16Array(samples.length);
-      for (let i = 0; i < samples.length; i++) {
-        pcmInt16[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
-      }
-
-      const mp3Parts = [];
-      const blockSize = 1152;
-      for (let i = 0; i < pcmInt16.length; i += blockSize) {
-        const chunk = pcmInt16.subarray(i, i + blockSize);
-        const mp3buf = mp3encoder.encodeBuffer(chunk);
-        if (mp3buf.length > 0) mp3Parts.push(new Uint8Array(mp3buf));
-      }
-      const flush = mp3encoder.flush();
-      if (flush.length > 0) mp3Parts.push(new Uint8Array(flush));
-
-      // 5. Merge and trigger download
-      const totalLen = mp3Parts.reduce((sum, p) => sum + p.length, 0);
-      const mp3Data = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const part of mp3Parts) { mp3Data.set(part, offset); offset += part.length; }
-
-      const blob = new Blob([mp3Data], { type: 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-      a.href = url;
-      a.download = `call-recording-${ts}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
-
-      const sizeKb = (blob.size / 1024).toFixed(1);
-      setRecStatus(`✅ MP3 downloaded (${sizeKb} KB)`, 'var(--success)');
-    } catch (err) {
-      console.error('[Recording] MP3 download failed:', err);
-      setRecStatus(`Failed: ${err.message}`, 'var(--danger)');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '⬇️ Download MP3';
-      updateRecButtons();
-    }
-  }
 
   function updateTtsAudioStatus(msg) {
     const status = document.getElementById('ttsAudioStatus');
@@ -1343,23 +1012,6 @@
       outcomeEl.textContent = state.outcome;
       lastDurationEl.textContent = `${state.duration}s`;
 
-      if (state.status === 'idle' || state.status === 'ended') {
-        // ── Recording: call ended. Keep agentId so download still works. ──
-        if (recIsActive) {
-          // Auto-stop if user forgot to press Stop
-          stopRecording();
-        }
-        recIsActive = false;
-        updateRecButtons();
-        // Only clear agentId after a delay so download still works post-call
-        setTimeout(() => {
-          // Don't clear if a new call started
-          if (state.activeCalls === 0) {
-            // Keep agentId for 5 min so MP3 download still works
-            setTimeout(() => { currentAgentId = null; updateRecButtons(); }, 5 * 60 * 1000);
-          }
-        }, 500);
-      }
 
       if (state.status === 'idle') {
         clearTranscriptPanels();
