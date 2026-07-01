@@ -193,6 +193,11 @@ export class VoiceAgent {
   speakGreeting() {
     if (this.isClosed) return;
     const greetingText = this.getGreetingText();
+    if (!greetingText) {
+      console.log('[Agent] No greeting configured; waiting for the caller.');
+      this.statusCallbacks.onStateChange('active');
+      return;
+    }
     console.log(`[Agent] Speaking greeting: "${greetingText}"`);
 
     this.isSpeaking = true;
@@ -242,7 +247,7 @@ export class VoiceAgent {
       .map(line => line.trim())
       .find(line => /^GREETING\s*:/i.test(line));
     if (greetingLine) return greetingLine.replace(/^GREETING\s*:/i, '').trim();
-    return 'Vanakkam, naan AI assistant pesuren. Eppadi help pannalam?';
+    return '';
   }
 
   // ─────────────────────────────────────────────────────────────────────────
