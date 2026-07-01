@@ -1095,6 +1095,11 @@ export class VoiceAgent {
 VOICE COST AND FLOW RULES:
 - Follow the business, industry, flow, and tone from system_prompt.txt.
 - Use knowledge_base.txt as the only source of business facts.
+- Respond directly to the latest caller transcript; never invent or assume what they said.
+- Never treat an unclear, incomplete, or unrelated transcript as agreement.
+- If intent is unclear, ask the caller to repeat instead of advancing the flow.
+- Do not begin every response with filler acknowledgements such as சரி, ஆமா, ம்ம், or ஓகே.
+- Never repeat an acknowledgement already spoken in the same turn.
 - Maximum 12 words per reply.
 - Ask exactly one question at the end.
 - Understand meaning from natural Tamil/Tanglish, not exact yes/no keywords.
