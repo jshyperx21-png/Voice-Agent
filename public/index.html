@@ -1,5 +1,6 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,10 @@
   <!-- Google Fonts Outfit & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+
   <style>
     :root {
       --bg: #090d16;
@@ -17,16 +20,21 @@
       --card-hover-border: rgba(100, 150, 255, 0.25);
       --text: #f1f5f9;
       --text-muted: #94a3b8;
-      
+
       /* Vibrant Tailored Colors */
-      --primary: #6366f1; /* Indigo */
+      --primary: #6366f1;
+      /* Indigo */
       --primary-glow: rgba(99, 102, 241, 0.15);
-      --accent: #f97316; /* Amber / Orange */
+      --accent: #f97316;
+      /* Amber / Orange */
       --accent-glow: rgba(249, 115, 22, 0.15);
-      --success: #10b981; /* Emerald */
-      --warning: #f59e0b; /* Yellow */
-      --danger: #ef4444; /* Rose */
-      
+      --success: #10b981;
+      /* Emerald */
+      --warning: #f59e0b;
+      /* Yellow */
+      --danger: #ef4444;
+      /* Rose */
+
       --font-sans: 'Outfit', sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }
@@ -43,7 +51,7 @@
       font-family: var(--font-sans);
       min-height: 100vh;
       overflow-x: hidden;
-      background-image: 
+      background-image:
         radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 90% 80%, rgba(249, 115, 22, 0.06) 0%, transparent 40%);
       background-attachment: fixed;
@@ -313,7 +321,8 @@
       width: 0.85rem;
       height: 0.85rem;
       border-radius: 50%;
-      background-color: #475569; /* idle */
+      background-color: #475569;
+      /* idle */
       transition: background-color 0.5s ease, box-shadow 0.5s ease;
     }
 
@@ -325,25 +334,43 @@
     }
 
     /* Dynamic states colors */
-    .status-idle .status-light { background-color: #64748b; box-shadow: 0 0 10px rgba(100, 116, 139, 0.3); }
-    .status-idle .status-text { color: #94a3b8; }
+    .status-idle .status-light {
+      background-color: #64748b;
+      box-shadow: 0 0 10px rgba(100, 116, 139, 0.3);
+    }
 
-    .status-ringing .status-light { 
-      background-color: var(--warning); 
+    .status-idle .status-text {
+      color: #94a3b8;
+    }
+
+    .status-ringing .status-light {
+      background-color: var(--warning);
       box-shadow: 0 0 15px var(--warning);
-      animation: pulse 1.2s infinite; 
+      animation: pulse 1.2s infinite;
     }
-    .status-ringing .status-text { color: var(--warning); }
 
-    .status-active .status-light { 
-      background-color: var(--success); 
+    .status-ringing .status-text {
+      color: var(--warning);
+    }
+
+    .status-active .status-light {
+      background-color: var(--success);
       box-shadow: 0 0 15px var(--success);
-      animation: pulse 1.8s infinite; 
+      animation: pulse 1.8s infinite;
     }
-    .status-active .status-text { color: var(--success); }
 
-    .status-ended .status-light { background-color: var(--danger); box-shadow: 0 0 10px var(--danger); }
-    .status-ended .status-text { color: var(--danger); }
+    .status-active .status-text {
+      color: var(--success);
+    }
+
+    .status-ended .status-light {
+      background-color: var(--danger);
+      box-shadow: 0 0 10px var(--danger);
+    }
+
+    .status-ended .status-text {
+      color: var(--danger);
+    }
 
     .duration-counter {
       font-family: var(--font-mono);
@@ -402,13 +429,22 @@
     }
 
     /* Head indicators matching gradients */
-    .user-header { color: var(--primary); }
-    .user-header .indicator { background: var(--primary); }
-    .ai-header { color: var(--accent); }
-    .ai-header .indicator { 
-      background: var(--accent); 
+    .user-header {
+      color: var(--primary);
     }
-    
+
+    .user-header .indicator {
+      background: var(--primary);
+    }
+
+    .ai-header {
+      color: var(--accent);
+    }
+
+    .ai-header .indicator {
+      background: var(--accent);
+    }
+
     .ai-speaking-indicator {
       animation: pulse 1s infinite alternate;
       box-shadow: 0 0 8px var(--accent);
@@ -426,9 +462,20 @@
       background: rgba(148, 163, 184, 0.12);
     }
 
-    .tts-audio-status.sending { color: #22d3ee; background: rgba(34, 211, 238, 0.12); }
-    .tts-audio-status.completed { color: #10b981; background: rgba(16, 185, 129, 0.12); }
-    .tts-audio-status.error { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+    .tts-audio-status.sending {
+      color: #22d3ee;
+      background: rgba(34, 211, 238, 0.12);
+    }
+
+    .tts-audio-status.completed {
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .tts-audio-status.error {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.12);
+    }
 
     .transcript-body {
       padding: 1.25rem;
@@ -444,13 +491,16 @@
     .transcript-body::-webkit-scrollbar {
       width: 6px;
     }
+
     .transcript-body::-webkit-scrollbar-track {
       background: transparent;
     }
+
     .transcript-body::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.1);
       border-radius: 3px;
     }
+
     .transcript-body::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.25);
     }
@@ -570,7 +620,7 @@
       bottom: calc(100% + 8px);
       right: 0;
       background: rgba(15, 20, 40, 0.97);
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 0.6rem;
       padding: 0.55rem 0.85rem;
       white-space: nowrap;
@@ -578,7 +628,7 @@
       font-family: var(--font-mono);
       color: #e2e8f0;
       z-index: 50;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
       pointer-events: none;
     }
 
@@ -614,20 +664,50 @@
 
     /* Animations */
     @keyframes pulse {
-      0% { opacity: 0.6; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-      70% { opacity: 1; box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-      100% { opacity: 0.6; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+      0% {
+        opacity: 0.6;
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+      }
+
+      70% {
+        opacity: 1;
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+      }
+
+      100% {
+        opacity: 0.6;
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+      }
     }
 
     @keyframes slideIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      20%, 60% { transform: translateX(-4px); }
-      40%, 80% { transform: translateX(4px); }
+
+      0%,
+      100% {
+        transform: translateX(0);
+      }
+
+      20%,
+      60% {
+        transform: translateX(-4px);
+      }
+
+      40%,
+      80% {
+        transform: translateX(4px);
+      }
     }
 
     .tts-provider-grid {
@@ -635,525 +715,542 @@
       grid-template-columns: repeat(3, 1fr);
       gap: 0.6rem;
     }
+
     .tts-provider-btn {
-      border: 1px solid rgba(255,255,255,0.12);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 0.7rem;
       padding: 0.7rem 0.4rem;
-      background: rgba(255,255,255,0.05);
+      background: rgba(255, 255, 255, 0.05);
       color: var(--text-muted);
       font: inherit;
       font-size: 0.82rem;
       font-weight: 700;
       cursor: pointer;
     }
+
     .tts-provider-btn.active {
       color: white;
       border-color: var(--primary);
       background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     }
-    .tts-provider-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-    .tts-provider-status { margin-top: 0.65rem; color: var(--text-muted); font-size: 0.78rem; }
+
+    .tts-provider-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .tts-provider-status {
+      margin-top: 0.65rem;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+    }
   </style>
 </head>
+
 <body>
 
-<div class="container">
-  
-  <header>
-    <div class="header-logo">
-      <div class="icon"></div>
-      <div>
-        <h1>Zeacrm 3Voice Agent Console</h1>
+  <div class="container">
+
+    <header>
+      <div class="header-logo">
+        <div class="icon"></div>
+        <div>
+          <h1>Zeacrm 3Voice Agent Console</h1>
+        </div>
       </div>
-    </div>
-    <div class="connection-tag" id="wsStatusTag">
-      <div class="dot"></div>
-      <span id="wsStatusText">Disconnected</span>
-    </div>
-  </header>
-
-  <div class="dashboard-grid">
-    
-    <!-- Left column: Configuration and Call details -->
-    <div style="display: flex; flex-direction: column; gap: 2rem;">
-      
-      <!-- Agent Configuration -->
-      <section class="glass-card">
-        <h2 class="card-title">⚙️ Agent System Parameters</h2>
-        
-        <div class="config-group">
-          <label for="systemPrompt">System Prompt</label>
-          <textarea id="systemPrompt" placeholder="You are Katie, a warm and helpful voice assistant..."></textarea>
-        </div>
-
-        <div class="config-group">
-          <label for="knowledgeBase">Knowledge Base Context</label>
-          <textarea id="knowledgeBase" placeholder="Pricing is... standard working hours are..."></textarea>
-        </div>
-
-        <button class="btn-save" id="btnSaveConfig" onclick="saveConfiguration()">
-          💾 Save Changes
-        </button>
-      </section>
-
-      <section class="glass-card">
-        <h2 class="card-title">TTS Provider</h2>
-        <div class="tts-provider-grid">
-          <button class="tts-provider-btn" data-provider="sarvam" onclick="selectTtsProvider('sarvam')">Sarvam</button>
-          <button class="tts-provider-btn" data-provider="elevenlabs" onclick="selectTtsProvider('elevenlabs')">ElevenLabs</button>
-          <button class="tts-provider-btn" data-provider="cartesia" onclick="selectTtsProvider('cartesia')">Cartesia</button>
-        </div>
-        <div class="tts-provider-status" id="ttsProviderStatus">Loading provider status...</div>
-      </section>
-
-      <!-- Call Info Details -->
-      <section class="glass-card">
-        <h2 class="card-title">📞 Call Details</h2>
-        
-        <div class="number-box">
-          <span>Active Plivo Number</span>
-          <strong id="plivoNumText">+1234567890</strong>
-        </div>
-
-        <div class="call-meta-grid">
-          <div class="meta-item">
-            <span class="label">Last Outcome</span>
-            <span class="value outcome" id="lastOutcomeText">No calls yet</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">Last Duration</span>
-            <span class="value" id="lastDurationText">0s</span>
-          </div>
-        </div>
-      </section>
-
-
-    </div>
-
-    <!-- Right column: Real-time Live conversation monitor -->
-    <section class="glass-card" style="flex-grow: 1;">
-      <h2 class="card-title">⚡ Real-time Conversation Monitor</h2>
-      
-      <div class="status-panel status-idle" id="statusPanel">
-        <div class="status-indicator">
-          <div class="status-light"></div>
-          <span class="status-text" id="statusText">Idle</span>
-        </div>
-        <div class="duration-counter" id="activeDurationText">00:00</div>
+      <div class="connection-tag" id="wsStatusTag">
+        <div class="dot"></div>
+        <span id="wsStatusText">Disconnected</span>
       </div>
+    </header>
 
-      <div class="live-stream-container">
-        
-        <!-- User transcript -->
-        <div class="transcript-box">
-          <div class="transcript-header user-header">
-            <div class="indicator"></div>
-            <span>Caller Transcript (Inbound)</span>
+    <div class="dashboard-grid">
+
+      <!-- Left column: Configuration and Call details -->
+      <div style="display: flex; flex-direction: column; gap: 2rem;">
+
+        <!-- Agent Configuration -->
+        <section class="glass-card">
+          <h2 class="card-title">⚙️ Agent System Parameters</h2>
+
+          <div class="config-group">
+            <label for="systemPrompt">System Prompt</label>
+            <textarea id="systemPrompt" placeholder="You are Katie, a warm and helpful voice assistant..."></textarea>
           </div>
-          <div class="transcript-body" id="userTranscriptBody">
-            <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
-              Call transcripts will appear here in real-time as the caller speaks...
+
+          <div class="config-group">
+            <label for="knowledgeBase">Knowledge Base Context</label>
+            <textarea id="knowledgeBase" placeholder="Pricing is... standard working hours are..."></textarea>
+          </div>
+
+          <button class="btn-save" id="btnSaveConfig" onclick="saveConfiguration()">
+            💾 Save Changes
+          </button>
+        </section>
+
+        <section class="glass-card">
+          <h2 class="card-title">TTS Provider</h2>
+          <div class="tts-provider-grid">
+            <button class="tts-provider-btn" data-provider="sarvam"
+              onclick="selectTtsProvider('sarvam')">Sarvam</button>
+            <button class="tts-provider-btn" data-provider="elevenlabs"
+              onclick="selectTtsProvider('elevenlabs')">ElevenLabs</button>
+            <button class="tts-provider-btn" data-provider="cartesia"
+              onclick="selectTtsProvider('cartesia')">Cartesia</button>
+          </div>
+          <div class="tts-provider-status" id="ttsProviderStatus">Loading provider status...</div>
+        </section>
+
+        <!-- Call Info Details -->
+        <section class="glass-card">
+          <h2 class="card-title">📞 Call Details</h2>
+
+          <div class="number-box">
+            <span>Active Plivo Number</span>
+            <strong id="plivoNumText">+1234567890</strong>
+          </div>
+
+          <div class="call-meta-grid">
+            <div class="meta-item">
+              <span class="label">Last Outcome</span>
+              <span class="value outcome" id="lastOutcomeText">No calls yet</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">Last Duration</span>
+              <span class="value" id="lastDurationText">0s</span>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- AI transcript -->
-        <div class="transcript-box">
-          <div class="transcript-header ai-header">
-            <div class="indicator" id="aiSpeakingIndicator"></div>
-            <span>AI Response (Outbound)</span>
-            <span class="tts-audio-status" id="ttsAudioStatus">Waiting for TTS audio</span>
-          </div>
-          <div class="transcript-body" id="aiTranscriptBody">
-            <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
-              AI synthesized speech will scroll here character-by-character...
-            </div>
-          </div>
-        </div>
 
       </div>
 
-    </section>
+      <!-- Right column: Real-time Live conversation monitor -->
+      <section class="glass-card" style="flex-grow: 1;">
+        <h2 class="card-title">⚡ Real-time Conversation Monitor</h2>
+
+        <div class="status-panel status-idle" id="statusPanel">
+          <div class="status-indicator">
+            <div class="status-light"></div>
+            <span class="status-text" id="statusText">Idle</span>
+          </div>
+          <div class="duration-counter" id="activeDurationText">00:00</div>
+        </div>
+
+        <div class="live-stream-container">
+
+          <!-- User transcript -->
+          <div class="transcript-box">
+            <div class="transcript-header user-header">
+              <div class="indicator"></div>
+              <span>Caller Transcript (Inbound)</span>
+            </div>
+            <div class="transcript-body" id="userTranscriptBody">
+              <div
+                style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
+                Call transcripts will appear here in real-time as the caller speaks...
+              </div>
+            </div>
+          </div>
+
+          <!-- AI transcript -->
+          <div class="transcript-box">
+            <div class="transcript-header ai-header">
+              <div class="indicator" id="aiSpeakingIndicator"></div>
+              <span>AI Response (Outbound)</span>
+              <span class="tts-audio-status" id="ttsAudioStatus">Waiting for TTS audio</span>
+            </div>
+            <div class="transcript-body" id="aiTranscriptBody">
+              <div
+                style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
+                AI synthesized speech will scroll here character-by-character...
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
 
   </div>
 
-</div>
+  <!-- Saving alert toast -->
+  <div class="toast" id="toast">
+    <span>✅ System configuration saved successfully!</span>
+  </div>
 
-<!-- Saving alert toast -->
-<div class="toast" id="toast">
-  <span>✅ System configuration saved successfully!</span>
-</div>
+  <script>
 
-<script>
+    let statusWs = null;
+    let activeDurationTimer = null;
+    let isAiSpeaking = false;
 
-  let statusWs = null;
-  let activeDurationTimer = null;
-  let isAiSpeaking = false;
+    // Active utterance trackers
+    let currentUserBubble = null;
+    let currentAiBubble = null;
 
-  // Active utterance trackers
-  let currentUserBubble = null;
-  let currentAiBubble = null;
-
-  // ── Timing: stores the last ai-timing event, applied to the next finalized AI bubble
-  let lastAiTiming = null;
+    // ── Timing: stores the last ai-timing event, applied to the next finalized AI bubble
+    let lastAiTiming = null;
 
 
-  // Page initialization
-  window.addEventListener('DOMContentLoaded', () => {
-    loadConfiguration();
-    loadTtsProvider();
-    connectStatusWebSocket();
-  });
-
-  function renderTtsProvider(provider, available = {}) {
-    document.querySelectorAll('.tts-provider-btn').forEach(btn => {
-      const name = btn.dataset.provider;
-      btn.classList.toggle('active', name === provider);
-      btn.disabled = available[name] === false;
-      btn.title = available[name] === false ? 'Credentials are not configured' : '';
+    // Page initialization
+    window.addEventListener('DOMContentLoaded', () => {
+      loadConfiguration();
+      loadTtsProvider();
+      connectStatusWebSocket();
     });
-    document.getElementById('ttsProviderStatus').textContent = `Active: ${provider}`;
-  }
 
-  async function loadTtsProvider() {
-    try {
-      const response = await fetch('/api/tts-provider');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to load TTS provider');
-      renderTtsProvider(data.provider, data.available);
-    } catch (error) {
-      document.getElementById('ttsProviderStatus').textContent = error.message;
-    }
-  }
-
-  async function selectTtsProvider(provider) {
-    const status = document.getElementById('ttsProviderStatus');
-    status.textContent = `Switching to ${provider}...`;
-    try {
-      const response = await fetch('/api/tts-provider', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider })
+    function renderTtsProvider(provider, available = {}) {
+      document.querySelectorAll('.tts-provider-btn').forEach(btn => {
+        const name = btn.dataset.provider;
+        btn.classList.toggle('active', name === provider);
+        btn.disabled = available[name] === false;
+        btn.title = available[name] === false ? 'Credentials are not configured' : '';
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Provider switch failed');
-      await loadTtsProvider();
-    } catch (error) {
-      status.textContent = error.message;
+      document.getElementById('ttsProviderStatus').textContent = `Active: ${provider}`;
     }
-  }
 
-  /**
-   * Loads configurations from server
-   */
-  async function loadConfiguration() {
-    try {
-      const response = await fetch('/api/config');
-      if (!response.ok) throw new Error('API Error');
-      const data = await response.json();
-      
-      document.getElementById('systemPrompt').value = data.system_prompt || '';
-      document.getElementById('knowledgeBase').value = data.knowledge_base || '';
-    } catch (err) {
-      console.error('Failed to load active system config:', err);
-    }
-  }
-
-  /**
-   * Saves updated configurations to server
-   */
-  async function saveConfiguration() {
-    const btn = document.getElementById('btnSaveConfig');
-    const systemPrompt = document.getElementById('systemPrompt').value;
-    const knowledgeBase = document.getElementById('knowledgeBase').value;
-
-    btn.disabled = true;
-    btn.textContent = '⏳ Saving settings...';
-
-    try {
-      const response = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_prompt: systemPrompt, knowledge_base: knowledgeBase })
-      });
-
-      if (!response.ok) throw new Error('API Error');
-      
-      btn.textContent = '✅ Saved!';
-      showToast();
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = '💾 Save Changes';
-      }, 1500);
-
-    } catch (err) {
-      console.error('Failed to save configurations:', err);
-      btn.textContent = '❌ Failed to Save';
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = '💾 Save Changes';
-      }, 2000);
-    }
-  }
-
-  /**
-   * Helper to display a save toast confirmation
-   */
-  function showToast() {
-    const toast = document.getElementById('toast');
-    toast.classList.add('show');
-    setTimeout(() => {
-      toast.classList.remove('show');
-    }, 3000);
-  }
-
-  /**
-   * Dynamic Call Duration counter logic
-   */
-  function startCallTimer() {
-    stopCallTimer();
-    let seconds = 0;
-    const counter = document.getElementById('activeDurationText');
-    
-    activeDurationTimer = setInterval(() => {
-      seconds++;
-      const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-      const secs = (seconds % 60).toString().padStart(2, '0');
-      counter.textContent = `${mins}:${secs}`;
-    }, 1000);
-  }
-
-  function stopCallTimer() {
-    if (activeDurationTimer) {
-      clearInterval(activeDurationTimer);
-      activeDurationTimer = null;
-    }
-  }
-
-  /**
-   * Reset the scrolling logs
-   */
-  function clearTranscriptPanels() {
-    document.getElementById('userTranscriptBody').innerHTML = '';
-    document.getElementById('aiTranscriptBody').innerHTML = '';
-    currentUserBubble = null;
-    currentAiBubble = null;
-  }
-
-  /**
-   * Connects to the dashboard broadcast WebSocket
-   */
-  function connectStatusWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/status`;
-    
-    console.log('[Dashboard] Connecting to status server:', wsUrl);
-    statusWs = new WebSocket(wsUrl);
-
-    statusWs.onopen = () => {
-      console.log('[Dashboard] Socket connection active.');
-      const tag = document.getElementById('wsStatusTag');
-      tag.classList.add('connected');
-      document.getElementById('wsStatusText').textContent = 'Connected';
-    };
-
-    statusWs.onmessage = (event) => {
+    async function loadTtsProvider() {
       try {
-        const msg = JSON.parse(event.data);
-
-        switch (msg.event) {
-          case 'status-update':
-            updateCallState(msg.state);
-            break;
-
-
-          case 'user-transcript':
-            handleUserTranscript(msg.text, msg.isFinal);
-            break;
-
-          case 'ai-transcript':
-            handleAiTranscript(msg.text, msg.isFinal);
-            break;
-
-          case 'agent-speaking':
-            toggleAiSpeakingState(msg.isSpeaking);
-            break;
-
-          case 'ai-timing':
-            // Store timing; it will be attached to the next finalized AI bubble
-            lastAiTiming = { llmMs: msg.llmMs, ttsMs: msg.ttsMs, totalMs: msg.totalMs };
-            break;
-
-          case 'tts-audio':
-            updateTtsAudioStatus(msg);
-            break;
-
-          case 'tts-provider':
-            loadTtsProvider();
-            break;
-
-          case 'interruption':
-            handleInterruptionNotice();
-            break;
-
-          case 'error':
-            alert(`Voice agent pipeline error: ${msg.message}`);
-            break;
-        }
-      } catch (err) {
-        console.error('Error handling websocket event:', err);
+        const response = await fetch('/api/tts-provider');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to load TTS provider');
+        renderTtsProvider(data.provider, data.available);
+      } catch (error) {
+        document.getElementById('ttsProviderStatus').textContent = error.message;
       }
-    };
-
-    statusWs.onclose = () => {
-      console.log('[Dashboard] Socket connection closed. Attempting reconnect in 3s...');
-      const tag = document.getElementById('wsStatusTag');
-      tag.classList.remove('connected');
-      document.getElementById('wsStatusText').textContent = 'Disconnected';
-      
-      stopCallTimer();
-      setTimeout(connectStatusWebSocket, 3000);
-    };
-  }
-
-
-  function updateTtsAudioStatus(msg) {
-    const status = document.getElementById('ttsAudioStatus');
-    if (!status) return;
-
-    status.className = `tts-audio-status ${msg.status || ''}`;
-    if (msg.status === 'sending') {
-      status.textContent = `Sending to Plivo · ${msg.sampleRate || '?'} Hz`;
-    } else if (msg.status === 'completed') {
-      const seconds = msg.sampleRate ? (msg.bytesSent / msg.sampleRate).toFixed(1) : '?';
-      status.textContent = `Queued to Plivo ${seconds}s · ${msg.framesSent} frames`;
-    } else if (msg.status === 'error') {
-      status.textContent = `TTS send failed: ${msg.message || 'unknown error'}`;
     }
-  }
 
-  /**
-   * Update Call metadata & state visualization
-   */
-  function updateCallState(state) {
-    const panel = document.getElementById('statusPanel');
-    const textEl = document.getElementById('statusText');
-    const plivoEl = document.getElementById('plivoNumText');
-    const durationEl = document.getElementById('activeDurationText');
-    
-    const outcomeEl = document.getElementById('lastOutcomeText');
-    const lastDurationEl = document.getElementById('lastDurationText');
-
-    plivoEl.textContent = state.plivoNumber || '+1234567890';
-    
-    // Clear dynamic state classes
-    panel.className = 'status-panel';
-    panel.classList.add(`status-${state.status}`);
-    textEl.textContent = state.status;
-
-    if (state.status === 'active' || state.status === 'ringing') {
-      if (state.status === 'active' && !activeDurationTimer) {
-        startCallTimer();
+    async function selectTtsProvider(provider) {
+      const status = document.getElementById('ttsProviderStatus');
+      status.textContent = `Switching to ${provider}...`;
+      try {
+        const response = await fetch('/api/tts-provider', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Provider switch failed');
+        await loadTtsProvider();
+      } catch (error) {
+        status.textContent = error.message;
       }
-      outcomeEl.textContent = 'In progress...';
-    } else {
+    }
+
+    /**
+     * Loads configurations from server
+     */
+    async function loadConfiguration() {
+      try {
+        const response = await fetch('/api/config');
+        if (!response.ok) throw new Error('API Error');
+        const data = await response.json();
+
+        document.getElementById('systemPrompt').value = data.system_prompt || '';
+        document.getElementById('knowledgeBase').value = data.knowledge_base || '';
+      } catch (err) {
+        console.error('Failed to load active system config:', err);
+      }
+    }
+
+    /**
+     * Saves updated configurations to server
+     */
+    async function saveConfiguration() {
+      const btn = document.getElementById('btnSaveConfig');
+      const systemPrompt = document.getElementById('systemPrompt').value;
+      const knowledgeBase = document.getElementById('knowledgeBase').value;
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Saving settings...';
+
+      try {
+        const response = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system_prompt: systemPrompt, knowledge_base: knowledgeBase })
+        });
+
+        if (!response.ok) throw new Error('API Error');
+
+        btn.textContent = '✅ Saved!';
+        showToast();
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '💾 Save Changes';
+        }, 1500);
+
+      } catch (err) {
+        console.error('Failed to save configurations:', err);
+        btn.textContent = '❌ Failed to Save';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '💾 Save Changes';
+        }, 2000);
+      }
+    }
+
+    /**
+     * Helper to display a save toast confirmation
+     */
+    function showToast() {
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    /**
+     * Dynamic Call Duration counter logic
+     */
+    function startCallTimer() {
       stopCallTimer();
-      
-      // format final durations
-      const mins = Math.floor(state.duration / 60).toString().padStart(2, '0');
-      const secs = (state.duration % 60).toString().padStart(2, '0');
-      durationEl.textContent = `${mins}:${secs}`;
+      let seconds = 0;
+      const counter = document.getElementById('activeDurationText');
 
-      outcomeEl.textContent = state.outcome;
-      lastDurationEl.textContent = `${state.duration}s`;
+      activeDurationTimer = setInterval(() => {
+        seconds++;
+        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const secs = (seconds % 60).toString().padStart(2, '0');
+        counter.textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function stopCallTimer() {
+      if (activeDurationTimer) {
+        clearInterval(activeDurationTimer);
+        activeDurationTimer = null;
+      }
+    }
+
+    /**
+     * Reset the scrolling logs
+     */
+    function clearTranscriptPanels() {
+      document.getElementById('userTranscriptBody').innerHTML = '';
+      document.getElementById('aiTranscriptBody').innerHTML = '';
+      currentUserBubble = null;
+      currentAiBubble = null;
+    }
+
+    /**
+     * Connects to the dashboard broadcast WebSocket
+     */
+    function connectStatusWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/status`;
+
+      console.log('[Dashboard] Connecting to status server:', wsUrl);
+      statusWs = new WebSocket(wsUrl);
+
+      statusWs.onopen = () => {
+        console.log('[Dashboard] Socket connection active.');
+        const tag = document.getElementById('wsStatusTag');
+        tag.classList.add('connected');
+        document.getElementById('wsStatusText').textContent = 'Connected';
+      };
+
+      statusWs.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          switch (msg.event) {
+            case 'status-update':
+              updateCallState(msg.state);
+              break;
 
 
-      if (state.status === 'idle') {
-        clearTranscriptPanels();
-        document.getElementById('userTranscriptBody').innerHTML = `
+            case 'user-transcript':
+              handleUserTranscript(msg.text, msg.isFinal);
+              break;
+
+            case 'ai-transcript':
+              handleAiTranscript(msg.text, msg.isFinal);
+              break;
+
+            case 'agent-speaking':
+              toggleAiSpeakingState(msg.isSpeaking);
+              break;
+
+            case 'ai-timing':
+              // Store timing; it will be attached to the next finalized AI bubble
+              lastAiTiming = { llmMs: msg.llmMs, ttsMs: msg.ttsMs, totalMs: msg.totalMs };
+              break;
+
+            case 'tts-audio':
+              updateTtsAudioStatus(msg);
+              break;
+
+            case 'tts-provider':
+              loadTtsProvider();
+              break;
+
+            case 'interruption':
+              handleInterruptionNotice();
+              break;
+
+            case 'error':
+              alert(`Voice agent pipeline error: ${msg.message}`);
+              break;
+          }
+        } catch (err) {
+          console.error('Error handling websocket event:', err);
+        }
+      };
+
+      statusWs.onclose = () => {
+        console.log('[Dashboard] Socket connection closed. Attempting reconnect in 3s...');
+        const tag = document.getElementById('wsStatusTag');
+        tag.classList.remove('connected');
+        document.getElementById('wsStatusText').textContent = 'Disconnected';
+
+        stopCallTimer();
+        setTimeout(connectStatusWebSocket, 3000);
+      };
+    }
+
+
+    function updateTtsAudioStatus(msg) {
+      const status = document.getElementById('ttsAudioStatus');
+      if (!status) return;
+
+      status.className = `tts-audio-status ${msg.status || ''}`;
+      if (msg.status === 'sending') {
+        status.textContent = `Sending to Plivo · ${msg.sampleRate || '?'} Hz`;
+      } else if (msg.status === 'completed') {
+        const seconds = msg.sampleRate ? (msg.bytesSent / msg.sampleRate).toFixed(1) : '?';
+        status.textContent = `Queued to Plivo ${seconds}s · ${msg.framesSent} frames`;
+      } else if (msg.status === 'error') {
+        status.textContent = `TTS send failed: ${msg.message || 'unknown error'}`;
+      }
+    }
+
+    /**
+     * Update Call metadata & state visualization
+     */
+    function updateCallState(state) {
+      const panel = document.getElementById('statusPanel');
+      const textEl = document.getElementById('statusText');
+      const plivoEl = document.getElementById('plivoNumText');
+      const durationEl = document.getElementById('activeDurationText');
+
+      const outcomeEl = document.getElementById('lastOutcomeText');
+      const lastDurationEl = document.getElementById('lastDurationText');
+
+      plivoEl.textContent = state.plivoNumber || '+1234567890';
+
+      // Clear dynamic state classes
+      panel.className = 'status-panel';
+      panel.classList.add(`status-${state.status}`);
+      textEl.textContent = state.status;
+
+      if (state.status === 'active' || state.status === 'ringing') {
+        if (state.status === 'active' && !activeDurationTimer) {
+          startCallTimer();
+        }
+        outcomeEl.textContent = 'In progress...';
+      } else {
+        stopCallTimer();
+
+        // format final durations
+        const mins = Math.floor(state.duration / 60).toString().padStart(2, '0');
+        const secs = (state.duration % 60).toString().padStart(2, '0');
+        durationEl.textContent = `${mins}:${secs}`;
+
+        outcomeEl.textContent = state.outcome;
+        lastDurationEl.textContent = `${state.duration}s`;
+
+
+        if (state.status === 'idle') {
+          clearTranscriptPanels();
+          document.getElementById('userTranscriptBody').innerHTML = `
           <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
             Call transcripts will appear here in real-time as the caller speaks...
           </div>
         `;
-        document.getElementById('aiTranscriptBody').innerHTML = `
+          document.getElementById('aiTranscriptBody').innerHTML = `
           <div style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: auto; margin-bottom: auto; padding: 2rem;">
             AI synthesized speech will scroll here character-by-character...
           </div>
         `;
+        }
       }
     }
-  }
 
-  /**
-   * Append user transcript in scrolling bubbles
-   */
-  function handleUserTranscript(text, isFinal) {
-    const body = document.getElementById('userTranscriptBody');
-    
-    // If we're starting a new transcription bubble, clear instructions
-    if (!currentUserBubble) {
-      if (body.querySelector('div[style*="text-align: center"]')) {
-        body.innerHTML = '';
+    /**
+     * Append user transcript in scrolling bubbles
+     */
+    function handleUserTranscript(text, isFinal) {
+      const body = document.getElementById('userTranscriptBody');
+
+      // If we're starting a new transcription bubble, clear instructions
+      if (!currentUserBubble) {
+        if (body.querySelector('div[style*="text-align: center"]')) {
+          body.innerHTML = '';
+        }
+        currentUserBubble = document.createElement('div');
+        currentUserBubble.className = 'speech-turn speech-user';
+        body.appendChild(currentUserBubble);
       }
-      currentUserBubble = document.createElement('div');
-      currentUserBubble.className = 'speech-turn speech-user';
-      body.appendChild(currentUserBubble);
-    }
 
-    if (isFinal) {
-      currentUserBubble.textContent = text;
-      currentUserBubble.classList.remove('interim-text');
-      currentUserBubble = null; // reset for next turn
-    } else {
-      currentUserBubble.textContent = text;
-      currentUserBubble.classList.add('interim-text');
-    }
-
-    // Scroll to bottom
-    body.scrollTop = body.scrollHeight;
-  }
-
-  /**
-   * Append AI voice text character-by-character.
-   * When bubble finalizes (isFinal=true), attach the timing badge from lastAiTiming.
-   */
-  function handleAiTranscript(text, isFinal) {
-    const body = document.getElementById('aiTranscriptBody');
-
-    if (!currentAiBubble) {
-      if (body.querySelector('div[style*="text-align: center"]')) {
-        body.innerHTML = '';
+      if (isFinal) {
+        currentUserBubble.textContent = text;
+        currentUserBubble.classList.remove('interim-text');
+        currentUserBubble = null; // reset for next turn
+      } else {
+        currentUserBubble.textContent = text;
+        currentUserBubble.classList.add('interim-text');
       }
-      currentAiBubble = document.createElement('div');
-      currentAiBubble.className = 'speech-turn speech-ai';
 
-      // Inner span for the text content
-      const textSpan = document.createElement('span');
-      textSpan.className = 'ai-bubble-text';
-      currentAiBubble.appendChild(textSpan);
-
-      body.appendChild(currentAiBubble);
+      // Scroll to bottom
+      body.scrollTop = body.scrollHeight;
     }
 
-    // Always write text to the inner span
-    const textSpan = currentAiBubble.querySelector('.ai-bubble-text');
+    /**
+     * Append AI voice text character-by-character.
+     * When bubble finalizes (isFinal=true), attach the timing badge from lastAiTiming.
+     */
+    function handleAiTranscript(text, isFinal) {
+      const body = document.getElementById('aiTranscriptBody');
 
-    if (isFinal) {
-      if (text && textSpan) textSpan.textContent += text;
+      if (!currentAiBubble) {
+        if (body.querySelector('div[style*="text-align: center"]')) {
+          body.innerHTML = '';
+        }
+        currentAiBubble = document.createElement('div');
+        currentAiBubble.className = 'speech-turn speech-ai';
 
-      // Attach timing badge if we have timing data
-      if (lastAiTiming) {
-        const { llmMs, ttsMs, totalMs } = lastAiTiming;
-        lastAiTiming = null; // consume it
+        // Inner span for the text content
+        const textSpan = document.createElement('span');
+        textSpan.className = 'ai-bubble-text';
+        currentAiBubble.appendChild(textSpan);
 
-        const speedClass = totalMs < 800 ? 'fast' : totalMs < 1500 ? 'medium' : 'slow';
-        const displayTime = totalMs < 1000
-          ? `${totalMs}ms`
-          : `${(totalMs / 1000).toFixed(1)}s`;
+        body.appendChild(currentAiBubble);
+      }
 
-        const badge = document.createElement('div');
-        badge.className = `timing-badge ${speedClass}`;
-        badge.innerHTML = `
+      // Always write text to the inner span
+      const textSpan = currentAiBubble.querySelector('.ai-bubble-text');
+
+      if (isFinal) {
+        if (text && textSpan) textSpan.textContent += text;
+
+        // Attach timing badge if we have timing data
+        if (lastAiTiming) {
+          const { llmMs, ttsMs, totalMs } = lastAiTiming;
+          lastAiTiming = null; // consume it
+
+          const speedClass = totalMs < 800 ? 'fast' : totalMs < 1500 ? 'medium' : 'slow';
+          const displayTime = totalMs < 1000
+            ? `${totalMs}ms`
+            : `${(totalMs / 1000).toFixed(1)}s`;
+
+          const badge = document.createElement('div');
+          badge.className = `timing-badge ${speedClass}`;
+          badge.innerHTML = `
           <span>⚡ ${displayTime}</span>
           <div class="timing-tooltip">
             <div class="tooltip-row">
@@ -1170,54 +1267,55 @@
             </div>
           </div>
         `;
-        currentAiBubble.appendChild(badge);
+          currentAiBubble.appendChild(badge);
+        }
+
+        currentAiBubble = null; // finalize bubble
+      } else {
+        if (textSpan) textSpan.textContent += text;
       }
 
-      currentAiBubble = null; // finalize bubble
-    } else {
-      if (textSpan) textSpan.textContent += text;
+      // Scroll to bottom
+      body.scrollTop = body.scrollHeight;
     }
 
-    // Scroll to bottom
-    body.scrollTop = body.scrollHeight;
-  }
-
-  /**
-   * Toggles the voice indicator ring
-   */
-  function toggleAiSpeakingState(speaking) {
-    isAiSpeaking = speaking;
-    const indicator = document.getElementById('aiSpeakingIndicator');
-    if (speaking) {
-      indicator.classList.add('ai-speaking-indicator');
-    } else {
-      indicator.classList.remove('ai-speaking-indicator');
+    /**
+     * Toggles the voice indicator ring
+     */
+    function toggleAiSpeakingState(speaking) {
+      isAiSpeaking = speaking;
+      const indicator = document.getElementById('aiSpeakingIndicator');
+      if (speaking) {
+        indicator.classList.add('ai-speaking-indicator');
+      } else {
+        indicator.classList.remove('ai-speaking-indicator');
+      }
     }
-  }
 
-  /**
-   * Display visual notice for barge-in interruption
-   */
-  function handleInterruptionNotice() {
-    const userBody = document.getElementById('userTranscriptBody');
-    const aiBody = document.getElementById('aiTranscriptBody');
+    /**
+     * Display visual notice for barge-in interruption
+     */
+    function handleInterruptionNotice() {
+      const userBody = document.getElementById('userTranscriptBody');
+      const aiBody = document.getElementById('aiTranscriptBody');
 
-    // Create a visual interruption notification
-    const notice = document.createElement('div');
-    notice.className = 'interruption-notice';
-    notice.textContent = '⚡ Call interrupted (Barge-in)';
-    
-    aiBody.appendChild(notice);
-    aiBody.scrollTop = aiBody.scrollHeight;
+      // Create a visual interruption notification
+      const notice = document.createElement('div');
+      notice.className = 'interruption-notice';
+      notice.textContent = '⚡ Call interrupted (Barge-in)';
 
-    // Reset current bubble
-    if (currentAiBubble) {
-      currentAiBubble.style.borderStyle = 'dashed';
-      currentAiBubble.style.opacity = '0.7';
-      currentAiBubble = null;
+      aiBody.appendChild(notice);
+      aiBody.scrollTop = aiBody.scrollHeight;
+
+      // Reset current bubble
+      if (currentAiBubble) {
+        currentAiBubble.style.borderStyle = 'dashed';
+        currentAiBubble.style.opacity = '0.7';
+        currentAiBubble = null;
+      }
+      currentUserBubble = null;
     }
-    currentUserBubble = null;
-  }
-</script>
+  </script>
 </body>
+
 </html>
