@@ -7,6 +7,34 @@ import fs from 'fs';
 import path from 'path';
 import { VoiceAgent } from './agent.js';
 
+// ── In-memory log buffer for remote debugging ────────────────────────────────
+const logBuffer = [];
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+function addLog(type, args) {
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+  const logLine = `[${new Date().toISOString()}] [${type}] ${message}`;
+  logBuffer.push(logLine);
+  if (logBuffer.length > 200) logBuffer.shift();
+}
+
+console.log = (...args) => {
+  addLog('INFO', args);
+  originalLog.apply(console, args);
+};
+
+console.error = (...args) => {
+  addLog('ERROR', args);
+  originalError.apply(console, args);
+};
+
+console.warn = (...args) => {
+  addLog('WARN', args);
+  originalWarn.apply(console, args);
+};
+
 const PORT = process.env.PORT || 3000;
 const app = express();
 
@@ -158,6 +186,14 @@ app.get('/health', (req, res) => {
     uptimeSeconds: Math.round(process.uptime()),
     timestamp: new Date().toISOString()
   });
+});
+
+/**
+ * GET /api/logs — Diagnostic log output.
+ */
+app.get('/api/logs', (req, res) => {
+  res.set('Content-Type', 'text/plain');
+  res.send(logBuffer.join('\n'));
 });
 
 /**
